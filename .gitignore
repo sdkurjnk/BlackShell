@@ -1,2 +1,5 @@
 # Claude Code local settings
 .claude/settings.local.json
+
+# GitHub App private key — never commit
+*.pem
