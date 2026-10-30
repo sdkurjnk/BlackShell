@@ -1,0 +1,39 @@
+{
+  "name": "@sdkurjnk/blackshell",
+  "version": "0.1.0",
+  "description": "Build-stage protection tool that seals critical code regions at the compiler IR level, communicating with the outside only by value.",
+  "type": "module",
+  "bin": {
+    "blackshell": "bin/blackshell.js"
+  },
+  "files": [
+    "bin/",
+    "src/"
+  ],
+  "scripts": {
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sdkurjnk/BlackShell.git"
+  },
+  "bugs": {
+    "url": "https://github.com/sdkurjnk/BlackShell/issues"
+  },
+  "homepage": "https://github.com/sdkurjnk/BlackShell#readme",
+  "keywords": [
+    "obfuscation",
+    "code-protection",
+    "compiler",
+    "ir",
+    "cli"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}
