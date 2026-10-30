@@ -3,3 +3,6 @@
 
 # GitHub App private key — never commit
 *.pem
+
+# Node
+node_modules/

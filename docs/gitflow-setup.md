@@ -110,7 +110,7 @@ gh api -X POST repos/sdkurjnk/BlackShell/rulesets --input - <<'JSON'
   "rules": [
     { "type": "required_status_checks", "parameters": {
         "strict_required_status_checks_policy": false,
-        "required_status_checks": [ { "context": "test" }, { "context": "Verify PR Checklist" } ]
+        "required_status_checks": [ { "context": "test (20)" }, { "context": "test (22)" }, { "context": "Verify PR Checklist" } ]
     } }
   ]
 }
@@ -131,7 +131,8 @@ gh api -X POST repos/sdkurjnk/BlackShell/rulesets --input - <<'JSON'
     { "type": "required_status_checks", "parameters": {
         "strict_required_status_checks_policy": false,
         "required_status_checks": [
-          { "context": "test" },
+          { "context": "test (20)" },
+          { "context": "test (22)" },
           { "context": "Verify PR Checklist" },
           { "context": "Verify Version Label" },
           { "context": "Serialize Guard" }
@@ -164,6 +165,27 @@ JSON
 
 ---
 
+## 6. npm 배포 (publish.yml)
+
+`publish.yml`은 GitHub Release(`release: published`)가 생기면 `@sdkurjnk/blackshell`을 npm에 올린다.
+버전은 릴리스 태그 `vX.Y.Z`에서 가져와 `package.json`에 써넣고 publish하므로, release 브랜치에
+버전 bump 커밋이 필요 없다. 인증은 npm granular automation 토큰(`NPM_TOKEN` 시크릿).
+
+1. npmjs.com → 로그인 → Account → **Access Tokens** → **Generate New Token** → **Granular Access Token**
+   - Packages and scopes: `@sdkurjnk/*`에 **Read and write**
+   - 만료일 설정(예: 1년)
+2. 토큰을 레포 시크릿에 등록:
+
+```bash
+gh secret set NPM_TOKEN --body "<npm granular token>" -R sdkurjnk/BlackShell
+```
+
+> 첫 publish는 스코프 패키지라 바로 생성된다(별도 선점 불필요). provenance는 `package.json`의
+> `publishConfig.provenance=true` + 워크플로의 `id-token: write`로 자동 첨부된다.
+> (보안 강화를 원하면 추후 npm **Trusted Publishing(OIDC)**로 토큰 없이 전환 가능.)
+
+---
+
 ## 왜 이렇게 쪼개나 (설계 근거)
 
 - **승인(A)과 CI(B)를 분리**: Ruleset bypass는 그 룰셋의 규칙을 통째로 우회한다. App이 back-merge를
@@ -178,8 +200,9 @@ JSON
 
 ```bash
 gh api repos/sdkurjnk/BlackShell/rulesets            # 4개 존재 확인
-gh workflow list -R sdkurjnk/BlackShell              # 워크플로 6개 노출
+gh workflow list -R sdkurjnk/BlackShell              # 워크플로 7개 노출
 ```
 
 드라이런: `feature/x` 브랜치(라벨 1개) → develop PR → 병합 → `release/v0.x.0` 자동 생성 →
-Actions에서 **Finish Release / Hotfix** 실행 → 태그·PR 2개·App 머지 → GitHub Release·브랜치 삭제까지 로그 추적.
+Actions에서 **Finish Release / Hotfix** 실행 → 태그·PR 2개·App 머지 → GitHub Release → npm publish →
+브랜치 삭제까지 로그 추적.

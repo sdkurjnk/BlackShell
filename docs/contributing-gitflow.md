@@ -4,8 +4,9 @@ BlackShell은 GitFlow 기반의 자동화 릴리스 파이프라인을 쓴다. �
 **`feature/* → develop` PR 하나를 잘 올리는 것**뿐이고, 태그·`master` 병합·GitHub Release·브랜치
 삭제는 전부 자동으로 처리된다. 이 문서는 그 하나를 어떻게 올리는지를 설명한다.
 
-> 참고: 아직 언어/툴체인이 미정이라(기획안 §9) 현재 `test` 체크는 항상 통과하는 **자리표시자**이고,
-> 패키지 배포는 없다(태그 시 **GitHub Release**만 생성). 언어가 정해지면 실 테스트와 배포가 붙는다.
+> 구현은 Node.js, 배포는 npm(`@sdkurjnk/blackshell`, CLI 명령어 `blackshell`)이다. finalize 후
+> GitHub Release가 생기면 그 태그 버전으로 npm에 자동 publish된다. (내부 IR 엔진 언어는 추후 결정 —
+> CLI 경계 뒤에 숨긴다. 기획안 §9.)
 
 ---
 
@@ -25,12 +26,12 @@ BlackShell은 GitFlow 기반의 자동화 릴리스 파이프라인을 쓴다. �
                      │                 │                │
                      ●<─[auto-merge]───┼──[auto-merge]─>●
              back-merge                │                │
-                     │                 │   [auto] 병합 후 GitHub Release 생성
+                     │                 │   [auto] 병합 후 GitHub Release → npm publish
                      │                 X                |   #[auto] 브랜치 삭제
                      ▼                                  ▼
 
  hotfix (출시 후 긴급): master ─[Actions "Make Hotfix"]▶ hotfix/vX.Y.(Z+1) ─수정▶
-   〔사람 finalize〕▶ tag(Z+1) ▶ master·develop auto-merge ▶ GitHub Release ▶ 삭제
+   〔사람 finalize〕▶ tag(Z+1) ▶ master·develop auto-merge ▶ GitHub Release ▶ npm publish ▶ 삭제
 ```
 
 당신은 `develop`으로 PR을 올리고 병합되게 만들면 끝이다. 그 뒤는 파이프라인이 알아서 한다.
@@ -85,7 +86,7 @@ PR 본문의 체크박스(`- [ ]`)는 **작성자가 완료한 항목을 전부 
 
 - **Serialize Guard** — 지금 진행 중인 release/hotfix가 없는지(§4).
 
-- **test** — (현재는 자리표시자로 항상 통과. 언어 확정 후 실 테스트로 교체 예정.)
+- **test (20) / test (22)** — Node 20·22에서 CLI 테스트 통과(`npm ci` → `npm test`).
 
 ### 2-4. 리뷰를 받는다
 **사람이 코드를 검토하는 곳은 이 PR 하나뿐이다.** 승인 1개 + CI 초록불이면 병합할 수 있다.
@@ -100,7 +101,7 @@ PR 본문의 체크박스(`- [ ]`)는 **작성자가 완료한 항목을 전부 
 1. `feature → develop`이 병합되면 파이프라인이 `release/vX.Y.Z` 브랜치를 **자동 생성**한다(아직 태그·배포 없음).
 2. 릴리스 담당자가 "배포 준비 완료" 신호(수동 워크플로 실행)를 주면 태그가 찍히고
    `release → master`·`release → develop` PR이 자동으로 열려 무인 병합된다.
-3. 두 병합이 끝나면 GitHub Release가 생성된 뒤 release 브랜치가 삭제된다.
+3. 두 병합이 끝나면 GitHub Release가 생성되고 → npm에 publish된 뒤 release 브랜치가 삭제된다.
 
 즉, 당신의 변경은 develop에 들어간 순간 다음 릴리스 후보가 된다. 배포 타이밍만 릴리스 담당의 판단이다.
 
