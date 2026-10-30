@@ -1,6 +1,6 @@
 {
   "name": "@sdkurjnk/blackshell",
-  "version": "0.1.0",
+  "version": "0.0.0",
   "description": "Build-stage protection tool that seals critical code regions at the compiler IR level, communicating with the outside only by value.",
   "type": "module",
   "bin": {
