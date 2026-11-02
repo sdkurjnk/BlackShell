@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { triage, VERSION, USAGE } from '../src/cli.js';
+import { triage, VERSION, USAGE } from '../src/cli/index.js';
 
 test('version flags are answered as meta by JS (no engine needed)', () => {
   assert.deepEqual(triage(['--version']), { meta: VERSION });

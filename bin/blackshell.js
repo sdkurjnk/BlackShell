@@ -2,7 +2,7 @@
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { delimiter } from 'node:path';
-import { triage } from '../src/cli.js';
+import { triage } from '../src/cli/index.js';
 
 const argv = process.argv.slice(2);
 const t = triage(argv);
@@ -19,7 +19,7 @@ if (t.meta !== undefined) {
 // (docs/interfaces/01-cli-seam.md).
 // The engine package is made importable via PYTHONPATH; cwd stays the user's
 // working directory so IR paths and the .blackshell/ index resolve there.
-const engineDir = fileURLToPath(new URL('../engine', import.meta.url));
+const engineDir = fileURLToPath(new URL('../src/engine', import.meta.url));
 const pythonPath = process.env.PYTHONPATH
   ? engineDir + delimiter + process.env.PYTHONPATH
   : engineDir;
