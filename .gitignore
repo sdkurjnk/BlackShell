@@ -6,3 +6,11 @@
 
 # Node
 node_modules/
+
+# Python
+__pycache__/
+*.pyc
+
+# Black-Shell working state / build artifacts
+.blackshell/
+*.sealed.json
