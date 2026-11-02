@@ -8,7 +8,9 @@
   },
   "files": [
     "bin/",
-    "src/"
+    "src/cli/",
+    "src/engine/blackshell_engine/",
+    "src/engine/examples/"
   ],
   "scripts": {
     "test": "node --test",
