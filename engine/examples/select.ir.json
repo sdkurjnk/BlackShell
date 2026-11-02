@@ -1,0 +1,19 @@
+{
+  "name": "select",
+  "params": ["a", "b"],
+  "returns": ["r"],
+  "locals": [],
+  "blocks": [
+    { "label": "entry", "insts": [
+      { "op": "br", "cond": "a", "then": "use_a", "else": "use_b" }
+    ]},
+    { "label": "use_a", "insts": [
+      { "op": "mov", "dst": "r", "src": "a" },
+      { "op": "ret" }
+    ]},
+    { "label": "use_b", "insts": [
+      { "op": "mov", "dst": "r", "src": "b" },
+      { "op": "ret" }
+    ]}
+  ]
+}

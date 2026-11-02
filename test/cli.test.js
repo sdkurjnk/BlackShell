@@ -1,21 +1,23 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { run, VERSION } from '../src/cli.js';
+import { triage, VERSION, USAGE } from '../src/cli.js';
 
-test('version flags return the package version', () => {
-  assert.equal(run(['--version']), VERSION);
-  assert.equal(run(['-v']), VERSION);
-  assert.equal(run(['version']), VERSION);
+test('version flags are answered as meta by JS (no engine needed)', () => {
+  assert.deepEqual(triage(['--version']), { meta: VERSION });
+  assert.deepEqual(triage(['-v']), { meta: VERSION });
+  assert.deepEqual(triage(['version']), { meta: VERSION });
 });
 
-test('help is shown by default and on --help', () => {
-  assert.match(run([]), /^blackshell <command>/);
-  assert.match(run(['--help']), /Commands:/);
-  assert.match(run(['-h']), /Commands:/);
+test('bare invocation and top-level help show usage as meta', () => {
+  assert.deepEqual(triage([]), { meta: USAGE });
+  assert.deepEqual(triage(['--help']), { meta: USAGE });
+  assert.deepEqual(triage(['-h']), { meta: USAGE });
 });
 
-test('unknown command reports and still shows help', () => {
-  const out = run(['frobnicate']);
-  assert.match(out, /Unknown command: frobnicate/);
-  assert.match(out, /Commands:/);
+test('real commands are forwarded to the engine, not parsed by JS', () => {
+  assert.deepEqual(triage(['enshell']), { forward: true });
+  assert.deepEqual(triage(['add', 'foo.ir.json']), { forward: true });
+  assert.deepEqual(triage(['help', 'enshell']), { forward: true });
+  // JS does not know the command set, so unknown tokens forward too.
+  assert.deepEqual(triage(['frobnicate']), { forward: true });
 });

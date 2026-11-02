@@ -1,0 +1,13 @@
+{
+  "name": "add2",
+  "params": ["a"],
+  "returns": ["r"],
+  "locals": ["t0"],
+  "blocks": [
+    { "label": "entry", "insts": [
+      { "op": "const", "dst": "t0", "imm": 2 },
+      { "op": "add", "dst": "r", "lhs": "a", "rhs": "t0" },
+      { "op": "ret" }
+    ]}
+  ]
+}

@@ -6,31 +6,32 @@ const pkg = JSON.parse(
 
 export const VERSION = pkg.version;
 
-const HELP = `blackshell <command> [options]
+// Minimal top-level usage. Intentionally does NOT list commands — the engine
+// owns the command set (single source of truth), so JS can't drift from it.
+export const USAGE = `blackshell <command> [options]
 
 Build-stage protection tool. Seals critical code regions at the compiler IR
 level so they talk to the outside only by value.
 
-Commands:
-  help            Show this help
-  version         Print the version
+Run \`blackshell help\` for commands, \`blackshell -v\` for the version.`;
 
-Options:
-  -v, --version   Print the version
-  -h, --help      Show this help
-
-The sealing pipeline (static eligibility checker, isolated runner, L1-L3
-transforms) is not implemented yet. See docs/BlackShell_Plan.md for the roadmap.`;
-
-// Pure arg handling so it can be unit-tested without spawning a process.
-// Returns the text to print; the bin wrapper is the only thing that touches I/O.
-export function run(argv) {
-  const [cmd] = argv;
+// Pure triage — the external(JS)/internal(engine) seam (docs/interfaces/01).
+// JS answers only what packaging *owns* (version = the npm package value) plus
+// a bare top-level usage, so both work even if the engine is missing. Every
+// real command is forwarded to the engine verbatim; JS does not parse them.
+//
+// Returns { meta: string } to answer in JS, or { forward: true } to hand argv
+// to the engine.
+export function triage(argv) {
+  const [cmd, ...rest] = argv;
   if (cmd === '-v' || cmd === '--version' || cmd === 'version') {
-    return VERSION;
+    return { meta: VERSION };
   }
-  if (!cmd || cmd === '-h' || cmd === '--help' || cmd === 'help') {
-    return HELP;
+  if (cmd === undefined) {
+    return { meta: USAGE };
   }
-  return `Unknown command: ${cmd}\n\n${HELP}`;
+  if ((cmd === '-h' || cmd === '--help') && rest.length === 0) {
+    return { meta: USAGE };
+  }
+  return { forward: true };
 }
