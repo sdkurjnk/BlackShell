@@ -6,7 +6,8 @@ compares outputs (docs/interfaces/05). PoC/dev-only; production execution is
 native.
 """
 
-from .ir import BIN_OPS, IRError
+from .ir import BIN_OPS
+from .messages import EngineError
 
 _STEP_LIMIT = 1_000_000
 
@@ -16,7 +17,7 @@ def run(module, inputs):
     regs = {}
     for p in module["params"]:
         if p not in inputs:
-            raise IRError(f"missing input: {p}")
+            raise EngineError("interp.missing_input", param=p)
         regs[p] = int(inputs[p])
 
     mem = {}  # isolated local store, index -> value
@@ -27,7 +28,7 @@ def run(module, inputs):
     while True:
         steps += 1
         if steps > _STEP_LIMIT:
-            raise IRError("interpreter step limit exceeded (infinite loop?)")
+            raise EngineError("interp.step_limit")
 
         next_label = None
         for inst in blocks[cur]["insts"]:
@@ -51,7 +52,7 @@ def run(module, inputs):
             elif op == "ret":
                 return {r: regs[r] for r in module["returns"]}
             else:
-                raise IRError(f"unknown op: {op}")
+                raise EngineError("interp.unknown_op", op=op)
 
         if next_label is None:
             # Fell off the end of a block with no branch/ret: implicit return.
@@ -80,4 +81,4 @@ def _binop(op, a, b):
         return a << b
     if op == "shr":
         return a >> b
-    raise IRError(f"bad binop: {op}")
+    raise EngineError("interp.unknown_op", op=op)

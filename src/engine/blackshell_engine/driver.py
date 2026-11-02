@@ -4,17 +4,19 @@
 Pipeline order is fixed: load -> gate (reject => exit 2) -> noising L1->L2->L3
 (only the unit's selected levels) -> emit. Every stage honours the same IR
 contract, so dummy passes swap for real ones without changes here.
+
+Error handling: pipeline code raises messages.EngineError; the driver is the
+ONLY place that renders a message or touches stdout/stderr, via `_emit`, which
+looks the text/stream/exit up in the single-source catalog (messages.py).
 """
 
+import json
 import os
 import sys
 
-from . import harness, ir, stage
+from . import harness, ir, messages, stage
+from .messages import EXIT_OK, EngineError
 from .passes import GATE, LEVEL_ORDER, NOISING
-
-EXIT_OK = 0
-EXIT_ERR = 1
-EXIT_REJECT = 2  # gate rejected a unit (§5 condition 1)
 
 USAGE = """blackshell <command> [options]
 
@@ -49,16 +51,13 @@ def main(argv):
             "run": _run,
         }.get(cmd)
         if handler is None:
-            print(f"Unknown command: {cmd}", file=sys.stderr)
+            code = _emit("cmd.unknown", cmd=cmd)
             print(USAGE, file=sys.stderr)
-            return EXIT_ERR
+            return code
         return handler(rest)
-    except ir.IRError as e:
-        print(f"error: {e}", file=sys.stderr)
-        return EXIT_ERR
-    except FileNotFoundError as e:
-        print(f"error: file not found: {e.filename}", file=sys.stderr)
-        return EXIT_ERR
+    except EngineError as e:
+        # The one place pipeline-raised messages are rendered.
+        return _emit(e.key, **e.params)
 
 
 # --- commands ---------------------------------------------------------------
@@ -66,13 +65,10 @@ def main(argv):
 
 def _check(rest):
     path = _one_positional(rest)
-    module = ir.load_ir(path)
-    verdict = _run_gate(module)
+    verdict = _run_gate(ir.load_ir(path))
     if verdict["ok"]:
-        print(f"pass: {path} is eligible (gate: {GATE[0]})")
-        return EXIT_OK
-    print(f"reject: {path} — {verdict.get('reason', 'ineligible')}", file=sys.stderr)
-    return EXIT_REJECT
+        return _emit("check.pass", path=path, gate=GATE[0])
+    return _emit("gate.reject", path=path, reason=verdict.get("reason", "ineligible"))
 
 
 def _add(rest):
@@ -81,29 +77,22 @@ def _add(rest):
     ir.load_ir(path)  # validate before staging
     selected = _parse_levels(levels)
     stage.add(path, selected)
-    shown = ",".join(selected) if selected else "L0 (identity)"
-    print(f"staged: {path} [{shown}]")
-    return EXIT_OK
+    return _emit("stage.added", path=path, levels=_show_levels(selected))
 
 
 def _drop(rest):
     path = _one_positional(rest)
     if stage.drop(path):
-        print(f"dropped: {path}")
-    else:
-        print(f"not staged: {path}", file=sys.stderr)
-        return EXIT_ERR
-    return EXIT_OK
+        return _emit("stage.dropped", path=path)
+    return _emit("stage.not_staged", path=path)
 
 
 def _list(rest):
     units = stage.staged()
     if not units:
-        print("nothing staged")
-        return EXIT_OK
+        return _emit("stage.nothing")
     for u in units:
-        shown = ",".join(u["levels"]) if u["levels"] else "L0 (identity)"
-        print(f"  {u['path']} [{shown}]")
+        _emit("stage.list_item", path=u["path"], levels=_show_levels(u["levels"]))
     return EXIT_OK
 
 
@@ -115,10 +104,9 @@ def _enshell(rest):
 
     units = stage.staged()
     if not units:
-        print("nothing staged")
-        return EXIT_OK
+        return _emit("stage.nothing")
 
-    artifacts = []
+    count = 0
     for u in units:
         path, levels = u["path"], u["levels"]
         module = ir.load_ir(path)
@@ -127,11 +115,9 @@ def _enshell(rest):
         if not no_gate:
             verdict = _run_gate(module)
             if not verdict["ok"]:
-                print(
-                    f"reject: {path} — {verdict.get('reason', 'ineligible')}",
-                    file=sys.stderr,
+                return _emit(
+                    "gate.reject", path=path, reason=verdict.get("reason", "ineligible")
                 )
-                return EXIT_REJECT
 
         for level in LEVEL_ORDER:
             if level not in levels:
@@ -143,20 +129,19 @@ def _enshell(rest):
                     baseline, module, harness.sample_inputs(baseline)
                 )
                 if not report["equivalent"]:
-                    print(
-                        f"error: {name} broke equivalence on {path}: "
-                        f"{report['mismatches'][0]}",
-                        file=sys.stderr,
+                    return _emit(
+                        "verify.broken",
+                        pass_name=name,
+                        path=path,
+                        mismatch=report["mismatches"][0],
                     )
-                    return EXIT_ERR
 
-        out = _emit(module, emit_dir)
-        artifacts.append(out)
-        print(f"sealed: {path} -> {out}")
+        out = _write_artifact(module, emit_dir)
+        _emit("enshell.sealed", path=path, out=out)
+        count += 1
 
     stage.clear()  # 1-shot artifact model: staging is consumed by enshell
-    print(f"enshell complete: {len(artifacts)} unit(s); staging cleared")
-    return EXIT_OK
+    return _emit("enshell.done", count=count)
 
 
 def _run(rest):
@@ -164,10 +149,21 @@ def _run(rest):
     path = _one_positional(rest)
     from .interp import run as interp_run
 
-    result = interp_run(ir.load_ir(path), inputs)
-    for name, value in result.items():
+    # Interpreter outputs are data, not protocol messages — printed directly.
+    for name, value in interp_run(ir.load_ir(path), inputs).items():
         print(f"{name}={value}")
     return EXIT_OK
+
+
+# --- rendering (the single I/O point) ---------------------------------------
+
+
+def _emit(key, **params):
+    """Render one catalog message to the right stream; return its exit code.
+    The only function in the engine that writes user-facing output."""
+    line, stream, code = messages.render(key, **params)
+    print(line, file=sys.stderr if stream == messages.ERR else sys.stdout)
+    return code
 
 
 # --- helpers ----------------------------------------------------------------
@@ -178,15 +174,17 @@ def _run_gate(module):
     return check(module)
 
 
-def _emit(module, out_dir):
-    import json
-
+def _write_artifact(module, out_dir):
     os.makedirs(out_dir, exist_ok=True)
     out = os.path.join(out_dir, f"{module['name']}.sealed.json")
     with open(out, "w", encoding="utf-8") as f:
         json.dump(module, f, indent=2)
         f.write("\n")
     return out
+
+
+def _show_levels(levels):
+    return ",".join(levels) if levels else "L0 (identity)"
 
 
 def _parse_levels(raw):
@@ -198,7 +196,7 @@ def _parse_levels(raw):
 def _one_positional(rest):
     positionals = [a for a in rest if not a.startswith("--")]
     if len(positionals) != 1:
-        raise ir.IRError("expected exactly one <ir-file> argument")
+        raise EngineError("arg.one_positional")
     return positionals[0]
 
 
