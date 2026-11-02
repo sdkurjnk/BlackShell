@@ -1,6 +1,6 @@
 {
   "name": "@sdkurjnk/blackshell",
-  "version": "0.1.0",
+  "version": "0.0.0",
   "description": "Build-stage protection tool that seals critical code regions at the compiler IR level, communicating with the outside only by value.",
   "type": "module",
   "bin": {
@@ -8,10 +8,13 @@
   },
   "files": [
     "bin/",
-    "src/"
+    "src/cli/",
+    "src/engine/blackshell_engine/",
+    "src/engine/examples/"
   ],
   "scripts": {
-    "test": "node --test"
+    "test": "node --test",
+    "test:engine": "python -m unittest discover -s src/engine/tests -t src/engine -p \"test_*.py\""
   },
   "engines": {
     "node": ">=20"
