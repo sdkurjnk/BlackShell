@@ -16,6 +16,7 @@ enum ExitCode { EXIT_OK = 0, EXIT_ERR = 1, EXIT_REJECT = 2 };
 bool frontend_compile(const std::string& src, const std::string& ir_out);  // clang: source -> IR
 bool gate_check(const std::string& ir);                                     // §5 cond.1; dummy accept-all
 bool noising_apply(const std::string& ir);                                  // L1-L3; dummy identity
+bool verify_equivalent(const std::string& baseline_ir, const std::string& transformed_ir);  // L0 vs transformed; dummy = equivalent
 bool backend_emit(const std::string& ir, const std::string& obj_out);       // llc: IR -> object
 
 // --- driver (sequences the primitives) ---

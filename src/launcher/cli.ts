@@ -25,6 +25,7 @@ function render(token: string): { line: string; err: boolean } {
     case "sealed": return { line: `sealed: ${a[0]} -> ${a[1]}`, err: false };
     case "frontend.failed": return { line: `error: clang (frontend) failed on ${a[0]}`, err: true };
     case "backend.failed": return { line: `error: llc (backend) failed on ${a[0]}`, err: true };
+    case "verify.broken": return { line: `error: noising broke equivalence on ${a[0]}`, err: true };
     case "arg.one_positional": return { line: `error: expected exactly one <source> argument`, err: true };
     case "cmd.unknown": return { line: `error: unknown command: ${a[0]}`, err: true };
     default: return { line: token, err: true };

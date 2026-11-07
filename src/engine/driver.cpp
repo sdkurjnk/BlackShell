@@ -23,6 +23,9 @@ int driver_seal(const std::string& src) {
     if (!frontend_compile(src, ir)) { std::printf("frontend.failed %s\n", src.c_str()); return EXIT_ERR; }
     if (!gate_check(ir)) { std::remove(ir.c_str()); std::printf("gate.reject %s\n", src.c_str()); return EXIT_REJECT; }
     if (!noising_apply(ir)) { std::remove(ir.c_str()); std::printf("noising.failed %s\n", src.c_str()); return EXIT_ERR; }
+    // baseline == transformed here (identity noising in place); real noising
+    // yields a distinct transformed IR while the baseline is the L0 (pre-noise) IR.
+    if (!verify_equivalent(ir, ir)) { std::remove(ir.c_str()); std::printf("verify.broken %s\n", src.c_str()); return EXIT_ERR; }
     if (!backend_emit(ir, obj)) { std::remove(ir.c_str()); std::printf("backend.failed %s\n", src.c_str()); return EXIT_ERR; }
     std::remove(ir.c_str());
     std::printf("sealed %s %s\n", src.c_str(), obj.c_str());
