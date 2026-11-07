@@ -3,7 +3,7 @@
 // rendering (docs/Architecture.md §5 hybrid). The C++ engine returns structured
 // tokens; the Launcher renders them. Meta queries (version/help) answer here.
 import { spawnSync } from "node:child_process";
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 const here = (p: string): string => fileURLToPath(new URL(p, import.meta.url));
@@ -38,11 +38,8 @@ function main(argv: string[]): number {
   if (cmd !== "check" && cmd !== "seal") { console.error(`error: unknown command: ${cmd}`); console.error(USAGE); return 1; }
 
   const engine = here(process.platform === "win32" ? "../build/blackshell-engine.exe" : "../build/blackshell-engine");
-  // The engine shells out to clang/llc; make sure they're on PATH.
-  // shortcut: hardcoded MSYS2 ucrt64 bin, upgrade to detection/config.
-  const ucrt = "C:\\msys64\\ucrt64\\bin";
-  const PATH = existsSync(ucrt) ? ucrt + ";" + (process.env.PATH ?? "") : process.env.PATH;
-  const res = spawnSync(engine, [cmd, ...rest], { encoding: "utf8", stdio: ["inherit", "pipe", "inherit"], env: { ...process.env, PATH } });
+  // The engine shells out to clang/llc, which must be on PATH.
+  const res = spawnSync(engine, [cmd, ...rest], { encoding: "utf8", stdio: ["inherit", "pipe", "inherit"] });
   if (res.error) { console.error("error: engine not found (build it: npm run build:engine)"); return 127; }
   const token = (res.stdout ?? "").trim().split("\n").pop() ?? "";
   if (token) { const { line, err } = render(token); if (err) console.error(line); else console.log(line); }
