@@ -4,17 +4,18 @@
   "description": "Build-stage protection tool that seals critical code regions at the compiler IR level, communicating with the outside only by value.",
   "type": "module",
   "bin": {
-    "blackshell": "bin/blackshell.js"
+    "blackshell": "dist/cli.js"
   },
   "files": [
-    "bin/",
-    "src/cli/",
-    "src/engine/blackshell_engine/",
-    "src/engine/examples/"
+    "dist/",
+    "src/"
   ],
   "scripts": {
-    "test": "node --test",
-    "test:engine": "python -m unittest discover -s src/engine/tests -t src/engine -p \"test_*.py\""
+    "build:engine": "node -e \"require('fs').mkdirSync('build',{recursive:true})\" && g++ -std=c++17 -O2 -o build/blackshell-engine src/engine/main.cpp",
+    "build:ts": "tsc",
+    "build": "npm run build:engine && npm run build:ts",
+    "pretest": "npm run build",
+    "test": "node --test"
   },
   "engines": {
     "node": ">=20"
@@ -38,5 +39,9 @@
   "publishConfig": {
     "access": "public",
     "provenance": true
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "typescript": "^7.0.2"
   }
 }

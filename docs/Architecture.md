@@ -6,6 +6,11 @@
 > [BlackShell_Plan.md §6](BlackShell_Plan.md)을, 이음매 계약은
 > [interfaces/](interfaces/)를 참고.
 
+> ⚠️ **2026-11-08 구현 전환:** PoC가 **Python 토이 엔진 → TS 런처 + C++ 엔진**으로 교체됐다
+> (실제 `clang`/`llc` 컴파일 + 더미 게이트·항등 노이징). 현재 코드 = `src/launcher/cli.ts` +
+> `src/engine/main.cpp`. **아래 §1~4와 `interfaces/`는 제거된 Python 토이 PoC를 설명하므로
+> 재동기화 대기 중**이다. 하이브리드 언어 경계는 §5, 목표 설계는 §6이 최신본.
+
 ---
 
 ## 1. 계층 개요
