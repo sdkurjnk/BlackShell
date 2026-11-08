@@ -1,58 +1,31 @@
-# 01. CLI 이음매 (외부 ↔ 내부)
+# 01. CLI 경계 (Launcher ↔ 엔진)
 
-> 고정하는 계약: JS 껍데기가 내부 엔진에 명령을 넘기는 경계. argv 전달 방식, 표준 스트림, exit code.
+> Launcher가 엔진 primitive를 호출하는 경계 — argv in, 토큰 out, exit code.
 
-> ⚠️ **PoC 기준.** 여기서 "JS는 명령 목록을 모르고 그대로 forward / 명령 단일 진실 원천은 엔진"은
-> 현재 PoC 모델이다. 2026-11-07 RISC 재배치(`../Architecture.md` §5)로 **프로덕션에선 명령셋 파싱·조합·
-> 메시지 렌더가 Launcher로 이동**(JS가 두꺼워짐), 경계도 서브프로세스 → in-process FFI. 구현 시 확정.
+Launcher(`cli.ts`)가 명령셋을 소유(파싱·스테이징·조합·렌더). 엔진엔 유닛 1개 호출
+(`check <path>` / `enshell <path>`)만 넘기고, 엔진은 토큰 한 줄 + exit code만 반환. 토큰→문구 렌더는
+Launcher(`render()`), 엔진은 문구를 모른다.
 
-## 원칙
+**프로토콜.** argv `[subcommand, path]` in · stdout 마지막 줄 = 토큰 · stderr inherit · exit code 전파.
+엔진은 `spawnSync`(stdio `["inherit","pipe","inherit"]`)로 유닛당 1회 호출. `-v`/`help`는 엔진 없이 Launcher 즉답.
 
-"**외부는 JS, 실행은 내부.**" JS는 명령을 **최초 수신**하되 **해석·수행하지 않는다.** 메타 질의(패키지가 소유한 값)만 즉답하고, 나머지는 **argv를 그대로** 내부 엔진에 넘긴다. 뭘 할지 정하고 수행하는 건 전부 내부.
-
-## JS 쪽 책임 (`bin/blackshell.js`)
-
-딱 세 가지만 한다:
-
-1. **메타 fast-path.** `--version` / `-v` / `version` → `package.json`의 `version`을 즉답. 내부 엔진 없이, spawn 없이 뜬다 (authoritative 버전은 발행된 npm 패키지 값이므로). `--help`도 최상위 사용법은 여기서 답할 수 있으나, **명령별 상세 도움말은 엔진 소관**(엔진이 명령을 소유하므로).
-2. **론처 + forward.** 그 외 모든 argv → 내부 엔진을 호출하며 **argv를 변형 없이 전달.** stdin/stdout/stderr는 그대로 상속(inherit)해 엔진 출력이 사용자에게 바로 간다.
-3. **부트스트랩 에러.** 엔진(PoC: Python / 프로덕션: 네이티브 바이너리)을 못 찾으면 크래시 대신 명확한 메시지 + 비정상 exit.
-
-JS는 명령 목록을 **알지 못한다.** `enshell`이든 `check`든 신규 명령이든 전부 엔진으로 흘려보낸다 → 명령 계약의 단일 진실 원천은 엔진(문서 02).
-
-## 경계 프로토콜
-
-| 항목 | 계약 |
-| --- | --- |
-| 입력 | argv 배열을 **변형 없이** 엔진에 전달 |
-| 정상 출력 | 엔진 **stdout** → 사용자에게 그대로 |
-| 오류·진단 | 엔진 **stderr** |
-| 상태 | **exit code**로 전달 (아래 표) |
-
-### exit code (JS와 엔진이 공유)
+## exit code
 
 | code | 의미 |
 | --- | --- |
 | 0 | 성공 |
-| 1 | 일반 오류 (잘못된 인자, 내부 실패 등) |
-| 2 | **봉인 거부** (게이트가 §5 조건1 위반 판정 — 문서 04) |
-| 127 | 엔진 바이너리/런타임을 못 찾음 (JS가 설정) |
+| 1 | 오류 (인자·프론트/백엔드 실패·등가검증 깨짐) |
+| 2 | 봉인 거부 (게이트, §5 조건1 — 문서 04) |
+| 127 | 엔진 바이너리 없음 (Launcher가 설정) |
 
-JS는 엔진의 exit code를 **그대로 전파**한다 (127만 JS가 자체 설정).
+## 토큰 → render()
 
-## 구현 (단계별)
+| 토큰 | 렌더(예) |
+| --- | --- |
+| `gate.ok <src>` / `gate.reject <src>` | `pass: … eligible` / `reject: … ineligible` |
+| `sealed <src> <obj>` | `sealed: <src> -> <obj>` |
+| `frontend.failed` / `backend.failed` | clang/llc 실패 |
+| `verify.broken <src>` | 노이징이 등가성 깸 |
+| `arg.one_positional` / `cmd.unknown <c>` | 인자/명령 오류 |
 
-| | PoC | 프로덕션 |
-| --- | --- | --- |
-| 엔진 호출 | `python` 서브프로세스 spawn (`python -m blackshell_engine <argv...>` 류) | 네이티브 바이너리 spawn (또는 N-API) |
-| 경계 성격 | 프로세스 경계 (stdio·exit code) | **C-ABI** 네이티브 아티팩트 / 프로세스 |
-| 바뀌는 것 | 엔진 몸통 언어 | — |
-| **안 바뀌는 것** | **이 문서의 프로토콜 전체** (argv in / stdout·stderr / exit code) | |
-
-PoC의 서브프로세스 프로토콜을 프로덕션의 C-ABI 호출이 그대로 계승한다. 이음매 위치가 안 움직이는 게 핵심 — 그래서 JS 껍데기는 PoC·프로덕션에서 거의 동일하다.
-
-## 출하 전 체크
-
-- [ ] `--version`이 엔진 없이도 뜨는가 (바이너리 삭제하고 테스트).
-- [ ] 엔진 부재 시 127 + 안내 메시지 (크래시 아님).
-- [ ] 알 수 없는 명령도 JS가 거르지 않고 엔진까지 가서 엔진이 판정하는가.
+> 프로덕션: 서브프로세스 spawn → in-process FFI 후보. 토큰·exit code 계약은 동일.
