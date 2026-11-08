@@ -47,9 +47,17 @@ export function showLevels(levels: string[]): string {
   return levels.join(",");
 }
 
+// Resolve the engine binary: the published package ships a per-platform prebuilt
+// under vendor/<platform>-<arch>/; a local dev build lands in build/.
+function enginePath(): string {
+  const exe = process.platform === "win32" ? "blackshell-engine.exe" : "blackshell-engine";
+  const vendored = here(`../vendor/${process.platform}-${process.arch}/${exe}`);
+  return existsSync(vendored) ? vendored : here(`../build/${exe}`);
+}
+
 // --- engine (C++) per-unit primitive call; returns the structured token line ---
 function engine(args: string[]): { token: string; status: number } {
-  const bin = here(process.platform === "win32" ? "../build/blackshell-engine.exe" : "../build/blackshell-engine");
+  const bin = enginePath();
   const res = spawnSync(bin, args, { encoding: "utf8", stdio: ["inherit", "pipe", "inherit"] });
   if (res.error) {
     console.error("error: engine not found (build it: npm run build:engine)");

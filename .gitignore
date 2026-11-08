@@ -17,3 +17,6 @@ __pycache__/
 build/
 dist/
 *.o
+
+# CD-assembled prebuilt engines (populated in the publish workflow only)
+vendor/

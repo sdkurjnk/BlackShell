@@ -8,7 +8,8 @@
   },
   "files": [
     "dist/",
-    "src/"
+    "src/",
+    "vendor/"
   ],
   "scripts": {
     "build:engine": "node -e \"require('fs').mkdirSync('build',{recursive:true})\" && g++ -std=c++17 -O2 -o build/blackshell-engine src/engine/main.cpp src/engine/driver.cpp src/engine/frontend.cpp src/engine/gate.cpp src/engine/noising.cpp src/engine/harness.cpp src/engine/backend.cpp",
