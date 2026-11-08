@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // BlackShell Launcher (TS). Owns the CLI: parsing, the command set, the staging
 // index and message rendering (docs/Architecture.md §5 hybrid). The C++ engine
-// exposes per-unit primitives (check, seal); the Launcher composes them — e.g.
-// `enshell` seals every staged unit by calling the engine's seal per unit.
+// exposes per-unit primitives (check, enshell); the Launcher composes them — e.g.
+// `enshell` seals every staged unit by calling the engine's enshell per unit.
 import { spawnSync } from "node:child_process";
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -13,7 +13,7 @@ const pkg = JSON.parse(readFileSync(here("../package.json"), "utf8")) as { versi
 const USAGE = `blackshell <command> [options]
 
   check <source>              Gate verdict only (dummy: accept-all)
-  add   <source> [--level L]  Stage a unit for sealing (L = e.g. L1,L2)
+  add   <source> [--level L]  Stage a unit for sealing (L = e.g. L1,L2; default L3)
   drop  <source>              Unstage a unit
   list                        Show staged units and their levels
   enshell                     Seal every staged unit -> object files
@@ -145,7 +145,7 @@ function cmdAdd(rest: string[]): number {
     console.error(`error: file not found: ${src}`);
     return 1;
   }
-  const levels = opt.value ? opt.value.split(",").map((s) => s.trim()).filter(Boolean) : [];
+  const levels = opt.value ? opt.value.split(",").map((s) => s.trim()).filter(Boolean) : ["L3"];
   const units = readStage().filter((u) => u.path !== src);
   units.push({ path: src, levels });
   writeStage(units);
@@ -190,7 +190,7 @@ function cmdEnshell(): number {
   }
   let code = 0;
   for (const u of units) {
-    const { token, status } = engine(["seal", u.path]);
+    const { token, status } = engine(["enshell", u.path]);
     emit(token);
     if (status !== 0) {
       code = status;

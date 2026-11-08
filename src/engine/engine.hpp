@@ -1,7 +1,7 @@
 #pragma once
 #include <string>
 
-// BlackShell engine — contract shared across the seal pipeline.
+// BlackShell engine — contract shared across the enshell pipeline.
 // The Driver sequences orthogonal primitives (load -> gate -> noise -> emit).
 // Each primitive lives in its own translation unit so a real implementation
 // drops in without touching the others (docs/Architecture.md §5).
@@ -21,4 +21,4 @@ bool backend_emit(const std::string& ir, const std::string& obj_out);       // l
 
 // --- driver (sequences the primitives) ---
 int driver_check(const std::string& src);   // gate verdict only
-int driver_seal(const std::string& src);    // full seal pipeline
+int driver_enshell(const std::string& src); // full enshell pipeline

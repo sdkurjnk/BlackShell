@@ -16,9 +16,9 @@ int driver_check(const std::string& src) {
     return EXIT_OK;
 }
 
-// Seal pipeline: frontend -> gate -> noising -> backend -> artifact. Emits
+// Enshell pipeline: frontend -> gate -> noising -> backend -> artifact. Emits
 // structured tokens on stdout; the Launcher renders them.
-int driver_seal(const std::string& src) {
+int driver_enshell(const std::string& src) {
     const std::string base = stem(src), ir = base + ".ll", obj = base + ".o";
     if (!frontend_compile(src, ir)) { std::printf("frontend.failed %s\n", src.c_str()); return EXIT_ERR; }
     if (!gate_check(ir)) { std::remove(ir.c_str()); std::printf("gate.reject %s\n", src.c_str()); return EXIT_REJECT; }
