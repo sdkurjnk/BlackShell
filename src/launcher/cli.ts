@@ -28,19 +28,19 @@ interface Unit {
   levels: string[];
 }
 
-function readStage(): Unit[] {
+export function readStage(): Unit[] {
   if (!existsSync(STAGE_FILE)) {
     return [];
   }
   return JSON.parse(readFileSync(STAGE_FILE, "utf8")) as Unit[];
 }
 
-function writeStage(units: Unit[]): void {
+export function writeStage(units: Unit[]): void {
   mkdirSync(".blackshell", { recursive: true });
   writeFileSync(STAGE_FILE, JSON.stringify(units, null, 2) + "\n");
 }
 
-function showLevels(levels: string[]): string {
+export function showLevels(levels: string[]): string {
   if (levels.length === 0) {
     return "L0 (identity)";
   }
@@ -60,7 +60,7 @@ function engine(args: string[]): { token: string; status: number } {
 }
 
 // engine token -> rendered message. The engine never renders.
-function render(token: string): { line: string; err: boolean } {
+export function render(token: string): { line: string; err: boolean } {
   const [key, ...a] = token.split(" ");
   switch (key) {
     case "gate.ok": {
@@ -106,7 +106,7 @@ function emit(token: string): void {
 }
 
 // --- arg helpers ---
-function popOption(rest: string[], name: string): { value: string | undefined; rest: string[] } {
+export function popOption(rest: string[], name: string): { value: string | undefined; rest: string[] } {
   const i = rest.indexOf(name);
   if (i === -1) {
     return { value: undefined, rest };
@@ -114,7 +114,7 @@ function popOption(rest: string[], name: string): { value: string | undefined; r
   return { value: rest[i + 1], rest: rest.slice(0, i).concat(rest.slice(i + 2)) };
 }
 
-function onePositional(rest: string[]): string | undefined {
+export function onePositional(rest: string[]): string | undefined {
   const positionals = rest.filter((a) => !a.startsWith("--"));
   if (positionals.length !== 1) {
     return undefined;
@@ -235,4 +235,7 @@ function main(argv: string[]): number {
   }
 }
 
-process.exit(main(process.argv.slice(2)));
+// Run only when invoked directly (not when imported by tests).
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  process.exit(main(process.argv.slice(2)));
+}
