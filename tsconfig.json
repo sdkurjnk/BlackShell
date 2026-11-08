@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "target": "es2022",
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "strict": true,
+    "types": ["node"],
+    "rootDir": "src/launcher",
+    "outDir": "dist"
+  },
+  "include": ["src/launcher/**/*.ts"]
+}

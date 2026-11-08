@@ -14,3 +14,9 @@ __pycache__/
 # Black-Shell working state / build artifacts
 .blackshell/
 *.sealed.json
+build/
+dist/
+*.o
+
+# CD-assembled prebuilt engines (populated in the publish workflow only)
+vendor/
