@@ -1,26 +1,69 @@
 name: Publish to npm
 
 # Fires when post-merge.yml creates the GitHub Release (release: published).
-# Publishes @sdkurjnk/blackshell to npm. The published version is taken from the
-# release tag vX.Y.Z (written into package.json at publish time), so no version-bump
-# commit is needed in the release branch.
+# Builds the native engine for every supported platform, bundles the binaries
+# under vendor/<platform>-<arch>/, and publishes @sdkurjnk/blackshell to npm.
+# The launcher (dist/cli.js) picks the matching vendor/ binary at runtime; a
+# local dev build in build/ is the fallback (see src/launcher/cli.ts).
+#
+# Version comes from the release tag vX.Y.Z (written into package.json at publish
+# time), so no version-bump commit is needed in the release branch.
 #
 # Auth: an npm granular automation token in the NPM_TOKEN secret. `id-token: write`
 # is kept so npm attaches build provenance (publishConfig.provenance = true).
+#
+# NOTE: prebuilt engine only removes the compile step. `enshell` still shells out
+# to clang/llc at runtime, so installers need an LLVM toolchain on PATH until the
+# engine links libLLVM in-process.
 on:
   release:
     types: [published]
 
 jobs:
+  # One native engine per platform. vendor = `${process.platform}-${process.arch}`
+  # so the launcher resolves vendor/<vendor>/blackshell-engine[.exe] directly.
+  build-engine:
+    name: Build engine (${{ matrix.vendor }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - { os: ubuntu-latest,    vendor: linux-x64,    ext: "" }
+          - { os: ubuntu-24.04-arm, vendor: linux-arm64,  ext: "" }
+          - { os: macos-13,         vendor: darwin-x64,   ext: "" }
+          - { os: macos-latest,     vendor: darwin-arm64, ext: "" }
+          - { os: windows-latest,   vendor: win32-x64,    ext: ".exe" }
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install clang (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y clang
+
+      - name: Compile engine with clang++
+        shell: bash
+        run: |
+          mkdir -p "vendor/${{ matrix.vendor }}"
+          clang++ -std=c++17 -O2 -o "vendor/${{ matrix.vendor }}/blackshell-engine${{ matrix.ext }}" \
+            src/engine/main.cpp src/engine/driver.cpp src/engine/frontend.cpp \
+            src/engine/gate.cpp src/engine/noising.cpp src/engine/harness.cpp src/engine/backend.cpp
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: engine-${{ matrix.vendor }}
+          path: vendor/${{ matrix.vendor }}/blackshell-engine${{ matrix.ext }}
+          if-no-files-found: error
+
   publish:
     name: Publish to npm
+    needs: build-engine
     runs-on: ubuntu-latest
     permissions:
       contents: read
       id-token: write        # provenance attestation
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -28,8 +71,29 @@ jobs:
           node-version: '22'
           registry-url: 'https://registry.npmjs.org'
 
+      - name: Download engine binaries
+        uses: actions/download-artifact@v4
+        with:
+          pattern: engine-*
+          path: vendor-artifacts
+
+      - name: Assemble vendor/ tree
+        run: |
+          set -e
+          for d in vendor-artifacts/engine-*; do
+            name="${d##*/engine-}"
+            mkdir -p "vendor/$name"
+            cp "$d"/* "vendor/$name/"
+          done
+          # upload-artifact drops file modes; restore exec bit on the unix binaries.
+          chmod +x vendor/linux-*/blackshell-engine vendor/darwin-*/blackshell-engine
+          ls -lR vendor
+
       - name: Install dependencies
         run: npm ci
+
+      - name: Build launcher (dist/)
+        run: npm run build:ts
 
       - name: Set package version from the release tag
         run: npm version "${GITHUB_REF_NAME#v}" --no-git-tag-version --allow-same-version

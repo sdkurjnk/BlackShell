@@ -15,66 +15,65 @@ threat model, and theory.
 
 ## Status
 
-Early **proof of concept (v0.1.0)**. This is an LLVM-free *working skeleton*:
-the whole pipeline runs end to end on a toy IR with **dummy passes** (an
-accept-all gate and identity L1–L3 noising), so the layer contracts are locked
-and real passes can drop in without touching call sites.
+**Working skeleton.** The pipeline runs end to end — real `clang`/`llc` compile a
+source unit to an object file — but the three IP stages (eligibility **gate**,
+**noising** L1–L3, equivalence **harness**) are **dummies** (accept-all gate,
+identity noising), so the layer contracts are locked and real passes drop in
+without touching call sites. Dummy output is correct-but-unprotecting — **do not
+treat it as sealed.**
 
-What is **not** implemented yet (roadmap): the real eligibility gate (§5), real
-noising L1–L3 incl. carry-sensitive MBA, and raising the pipeline to LLVM for
-native, multi-target output. Dummy passes are correct-but-unprotecting — do not
-treat current output as sealed.
+Roadmap: real eligibility gate (§5), real noising L1–L3 incl. carry-sensitive MBA.
 
 ## Requirements
 
-- **Node.js ≥ 20** — the CLI front door.
-- **Python 3** — the PoC engine runs behind the CLI. (`blackshell --version`
-  works without it; every other command needs Python on `PATH`.)
+- **Node.js ≥ 20** — the CLI (TS Launcher).
+- **clang + llc on `PATH`** — the C++ engine shells out to them (source → LLVM IR → object), at runtime.
+- **g++ (C++17)** — only to build the engine from a clone. The published npm package ships a
+  prebuilt engine for `linux-x64`, `linux-arm64`, `darwin-x64`, `darwin-arm64`, `win32-x64`.
 
-> The internal engine is Python only for the PoC; production moves it behind a
-> C-ABI native boundary. See [`docs/interfaces/`](docs/interfaces/).
-
-## Install
+## Build & run (from a clone)
 
 ```sh
-npm install -g @sdkurjnk/blackshell
+npm install
+npm run build            # g++ engine + tsc launcher
+node dist/cli.js --version
+npm test                 # full test suite
 ```
 
-Or run from a clone without installing: `node bin/blackshell.js <command>`.
+`npm link` (or a global install) exposes the `blackshell` command; otherwise use
+`node dist/cli.js <command>`.
 
 ## Usage
 
-Units are toy IR files (JSON, see [`docs/interfaces/03-ir-model.md`](docs/interfaces/03-ir-model.md)).
-Sealing follows a git-style staging model — stage units, then seal the set.
+Units are **source files**. git-style staging — stage units, then seal the set.
 
 ```sh
-blackshell check <ir-file>              # preview: is this region eligible? (gate only)
-blackshell add   <ir-file> --level L1,L3  # stage a unit for sealing
-blackshell list                         # show staged units and levels
-blackshell drop  <ir-file>              # unstage
-blackshell enshell --verify             # seal all staged units -> artifacts
-blackshell run   <ir-file> --input a=40 # (dev) run a unit in the toy interpreter
+blackshell check <source>                # preview: is this region eligible? (gate only)
+blackshell add   <source> --level L1,L3   # stage a unit (default level: L3)
+blackshell list                          # show staged units and levels
+blackshell drop  <source>                # unstage
+blackshell enshell                       # seal all staged units -> object files
 ```
 
 Example:
 
 ```sh
-blackshell add src/engine/examples/add2.ir.json --level L1,L3
-blackshell enshell --verify --emit-ir out
+blackshell add src/engine/examples/add2.c --level L1,L3
+blackshell enshell
 ```
 
 ## How it works
 
 ```
-[external] JS CLI  ──argv──▶  [internal] engine
-  bin/ + src/cli/               src/engine/ (Python, PoC)
-  packaging · version           gate → noising (L1–L3) → emit
-                                equivalence harness verifies every pass
+[Launcher] TS / npm        argv        [Engine] C++ binary
+ src/launcher/cli.ts  ───────────────▶  src/engine/
+ CLI · staging · render   token · exit   clang → gate → noising → harness → llc → .o
 ```
 
-The external/internal split and every layer contract (CLI seam, driver, IR
-model, pass contract, verification harness) are documented in
-[`docs/interfaces/`](docs/interfaces/). Contributing follows GitFlow —
+The Launcher owns the CLI (parsing, staging, rendering); the engine runs the seal
+pipeline per unit and returns a structured token. Layer contracts and the full
+architecture are in [`docs/interfaces/`](docs/interfaces/) and
+[`docs/Architecture.md`](docs/Architecture.md). Contributing follows GitFlow —
 see [`docs/contributing-gitflow.md`](docs/contributing-gitflow.md).
 
 ## License
