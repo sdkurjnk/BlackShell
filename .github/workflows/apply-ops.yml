@@ -1,0 +1,145 @@
+name: Apply Ops
+
+# ops/* lane: pipeline/infra changes that do NOT change the version.
+# No PR, no tag, no Release -- apply the given ops/* branch straight onto the
+# latest master AND develop (bootstrap-style), after consistency checks.
+# ops/* is cut from develop: develop gets a merge, master gets a cherry-pick of
+# ONLY the ops commits (never unreleased develop history).
+#
+# Both merges are pushed with `git push --atomic`, so either both branches move
+# or neither does (never half-applied).
+#
+# Requirements:
+#   - GitHub App must be a bypass actor on the master/develop rulesets
+#     (direct push without a PR / required checks).
+#   - GitHub App needs "Workflows: write" permission to push .github/workflows changes.
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "ops/* branch to apply (e.g. ops/publish-dispatch)"
+        required: true
+
+concurrency:
+  group: apply-ops
+  cancel-in-progress: false
+
+env:
+  # Paths an ops/* branch may touch. Anything else -> fail (code must go through feature/*).
+  ALLOWED_PATHS: '^\.github/'
+
+jobs:
+  apply:
+    name: Check and merge into master + develop
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - name: Checkout (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
+
+      # ---------------- consistency checks (all before any write) ----------------
+      - name: Validate branch name and existence
+        env:
+          BRANCH: ${{ inputs.branch }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$BRANCH" =~ ^ops/[A-Za-z0-9._/-]+$ ]]; then
+            echo "::error::branch '$BRANCH' must match ops/<name>"; exit 1
+          fi
+          git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null \
+            || { echo "::error::branch '$BRANCH' not found on origin"; exit 1; }
+          git fetch origin \
+            "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH" \
+            "+refs/heads/master:refs/remotes/origin/master" \
+            "+refs/heads/develop:refs/remotes/origin/develop"
+
+      - name: Ensure no release/hotfix is open
+        run: |
+          set -euo pipefail
+          open="$(git ls-remote --heads origin 'refs/heads/release/*' 'refs/heads/hotfix/*' | awk '{print $2}' | sed 's#refs/heads/##')"
+          if [[ -n "$open" ]]; then
+            echo "::error::release/hotfix open: $open -- finish it first."; exit 1
+          fi
+
+      # ops/* is cut from develop. Only its OWN commits (base..branch) may go to
+      # master -- never the unreleased develop history underneath it.
+      - name: Resolve ops commits
+        id: range
+        env:
+          BRANCH: ${{ inputs.branch }}
+        run: |
+          set -euo pipefail
+          base="$(git merge-base origin/develop "origin/$BRANCH")"
+          if [[ -n "$(git rev-list --merges "$base..origin/$BRANCH")" ]]; then
+            echo "::error::'$BRANCH' contains merge commits -- keep it linear (rebase onto develop)."; exit 1
+          fi
+          if [[ -z "$(git rev-list "$base..origin/$BRANCH")" ]]; then
+            echo "::error::'$BRANCH' has no commits beyond develop."; exit 1
+          fi
+          git log --oneline "$base..origin/$BRANCH"
+          echo "base=$base" >> "$GITHUB_OUTPUT"
+
+      - name: Restrict changed paths
+        env:
+          BRANCH: ${{ inputs.branch }}
+          BASE: ${{ steps.range.outputs.base }}
+        run: |
+          set -euo pipefail
+          changed="$(git diff --name-only "$BASE" "origin/$BRANCH")"
+          echo "$changed"
+          bad="$(grep -Ev "$ALLOWED_PATHS" <<< "$changed" || true)"
+          if [[ -n "$bad" ]]; then
+            echo "::error::ops/* may only touch $ALLOWED_PATHS. Disallowed:"
+            echo "$bad"; exit 1
+          fi
+
+      - name: Lint workflows (actionlint)
+        run: |
+          set -euo pipefail
+          bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+          git checkout -q "origin/${{ inputs.branch }}"
+          ./actionlint -color
+
+      # ---------------- merge locally into both, then push atomically ----------------
+      - name: Apply to develop (merge) and master (cherry-pick ops commits only)
+        env:
+          BRANCH: ${{ inputs.branch }}
+          BASE: ${{ steps.range.outputs.base }}
+        run: |
+          set -euo pipefail
+          git config user.name  "blackshell-ops[bot]"
+          git config user.email "ops-bot@users.noreply.github.com"
+
+          # develop: ops branched from here -> normal merge.
+          git checkout -q -B apply-develop origin/develop
+          if ! git merge --no-ff -m "ops: apply $BRANCH into develop" "origin/$BRANCH"; then
+            echo "::error::conflict merging $BRANCH into develop -- rebase onto latest develop."
+            git merge --abort || true; exit 1
+          fi
+
+          # master: replay ONLY the ops commits, so unreleased develop work stays out.
+          git checkout -q -B apply-master origin/master
+          if ! git cherry-pick -x "$BASE..origin/$BRANCH"; then
+            echo "::error::ops commits don't apply cleanly on master (they depend on unreleased develop changes?)."
+            git cherry-pick --abort || true; exit 1
+          fi
+
+      - name: Push both (atomic)
+        env:
+          BRANCH: ${{ inputs.branch }}
+        run: |
+          set -euo pipefail
+          # --atomic: both refs update or neither does. Plain (non-force) push also
+          # fails if master/develop moved since checkout -> just re-run.
+          git push --atomic origin apply-master:master apply-develop:develop
+          git push origin --delete "$BRANCH"
+          echo "::notice::Applied $BRANCH to master and develop; branch deleted."
