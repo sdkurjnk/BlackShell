@@ -1,10 +1,13 @@
-// Engine unit tests (C++) — one per component: the three dummy IP primitives,
-// the two LLVM black-box primitives, and both driver entry points. Links the
-// primitive TUs but NOT main.cpp (this file owns main). Run from a temp cwd with
-// the source fixture path as argv[1]; the JS wrapper (test/engine.test.js) does that.
+// Engine unit tests (C++) — one per component: the frontend/backend LLVM
+// primitives, the three dummy IP primitives, and both driver entry points. Links
+// the primitive TUs but NOT main.cpp (this file owns main). Run from a temp cwd
+// with the source fixture path as argv[1]; the JS wrapper (test/engine.test.js) does that.
 #include "engine.hpp"
+#include "llvm/IR/LLVMContext.h"
+#include "llvm/IR/Module.h"
 #include <cstdio>
 #include <filesystem>
+#include <memory>
 #include <string>
 
 namespace fs = std::filesystem;
@@ -25,14 +28,19 @@ int main(int argc, char** argv) {
     const std::string src = argv[1];
     const std::string obj = fs::path(src).stem().string() + ".o";  // driver_enshell writes <stem>.o in cwd
 
-    // --- our IP primitives (dummies) ---
-    check(gate_check(src), "gate_check: dummy accept-all returns true");
-    check(noising_apply(src), "noising_apply: dummy identity returns true");
-    check(harness_verify(src, src), "harness_verify: dummy equivalent returns true");
+    // --- frontend (embedded Clang) ---
+    llvm::LLVMContext ctx;
+    std::unique_ptr<llvm::Module> m = frontend_compile(src, ctx);
+    check(m != nullptr, "frontend_compile: C source -> Module");
 
-    // --- LLVM black-box primitives ---
-    check(frontend_compile(src, "unit.ll") && nonempty("unit.ll"), "frontend_compile: clang source -> .ll");
-    check(backend_emit("unit.ll", "unit.o") && fs::exists("unit.o"), "backend_emit: llc .ll -> .o");
+    if (m) {
+        // --- our IP primitives (dummies) operate on the Module ---
+        check(gate_check(*m), "gate_check: dummy accept-all returns true");
+        check(noising_apply(*m), "noising_apply: dummy identity returns true");
+        check(harness_verify(*m, *m), "harness_verify: dummy equivalent returns true");
+        // --- backend (embedded LLVM); consumes the Module last ---
+        check(backend_emit(*m, "unit.o") && nonempty("unit.o"), "backend_emit: Module -> .o");
+    }
 
     // --- driver (sequencer) ---
     check(driver_check(src) == EXIT_OK, "driver_check: dummy gate -> EXIT_OK");

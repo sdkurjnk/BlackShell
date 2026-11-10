@@ -1,10 +1,24 @@
 #include "engine.hpp"
-#include <cstdlib>
 
-// Frontend (LLVM / clang): compile source to LLVM IR. BLACK BOX — real LLVM.
-// shortcut: std::system with naive quoting (local dev tool, user's own files);
-// upgrade to CreateProcess/argv exec if quoting/injection matters.
-bool frontend_compile(const std::string& src, const std::string& ir_out) {
-    const std::string cmd = "clang -S -emit-llvm \"" + src + "\" -o \"" + ir_out + "\"";
-    return std::system(cmd.c_str()) == 0;
+#include "clang/CodeGen/CodeGenAction.h"
+#include "clang/Frontend/CompilerInstance.h"
+#include "clang/Frontend/CompilerInvocation.h"
+#include "llvm/IR/Module.h"
+#include "llvm/TargetParser/Host.h"
+
+// Frontend: embed Clang to compile a C source file to an in-memory Module.
+// cc1 args are parsed into the invocation; EmitLLVMOnlyAction runs codegen into
+// the caller's LLVMContext, which we then take ownership of via takeModule().
+std::unique_ptr<llvm::Module> frontend_compile(const std::string& src, llvm::LLVMContext& ctx) {
+    clang::CompilerInstance ci;
+    ci.createDiagnostics();
+
+    const std::string triple = llvm::sys::getDefaultTargetTriple();
+    const char* args[] = {"-triple", triple.c_str(), "-x", "c", src.c_str()};
+    if (!clang::CompilerInvocation::CreateFromArgs(ci.getInvocation(), args, ci.getDiagnostics()))
+        return nullptr;
+
+    clang::EmitLLVMOnlyAction action(&ctx);
+    if (!ci.ExecuteAction(action)) return nullptr;
+    return action.takeModule();
 }
