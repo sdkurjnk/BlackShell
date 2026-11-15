@@ -4,9 +4,10 @@ BlackShell은 GitFlow 기반의 자동화 릴리스 파이프라인을 쓴다. �
 **`feature/* → develop` PR 하나를 잘 올리는 것**뿐이고, 태그·`master` 병합·GitHub Release·브랜치
 삭제는 전부 자동으로 처리된다. 이 문서는 그 하나를 어떻게 올리는지를 설명한다.
 
-> 구현은 Node.js, 배포는 npm(`@sdkurjnk/blackshell`, CLI 명령어 `blackshell`)이다. finalize 후
-> GitHub Release가 생기면 그 태그 버전으로 npm에 자동 publish된다. (내부 IR 엔진 언어는 추후 결정 —
-> CLI 경계 뒤에 숨긴다. 기획안 §9.)
+> 구현은 Node.js, 배포는 npm(`@sdkurjnk/blackshell`, CLI 명령어 `blackshell`)이다. finalize가
+> 태그를 찍으면 **병합 전에** 그 태그에서 5개 플랫폼 빌드·테스트 후 npm publish가 돌고, 이게
+> **성공해야** `master`·`develop` 병합이 진행된다(배포 선행 게이트). 깨진 플랫폼 빌드나 publish
+> 실패는 병합 자체를 막는다. (내부 IR 엔진 언어는 추후 결정 — CLI 경계 뒤에 숨긴다. 기획안 §9.)
 
 ---
 
@@ -23,15 +24,16 @@ BlackShell은 GitFlow 기반의 자동화 릴리스 파이프라인을 쓴다. �
                      |                 |                │
           Actions-"Run workflow" (Finish release)       |
                      │                 ● [auto] tag vX.Y.Z
+                     │                 │  [auto] 5플랫폼 빌드·테스트 → npm publish
                      │                 │                │
-                     ●<─[auto-merge]───┼──[auto-merge]─>●
+                     ●<[merge-release]─┼─[merge-release]>●   # publish 성공해야 병합
              back-merge                │                │
-                     │                 │   [auto] 병합 후 GitHub Release → npm publish
+                     │                 │   [auto] 병합 후 GitHub Release(마커)
                      │                 X                |   #[auto] 브랜치 삭제
                      ▼                                  ▼
 
  hotfix (출시 후 긴급): master ─[Actions "Make Hotfix"]▶ hotfix/vX.Y.(Z+1) ─수정▶
-   〔사람 finalize〕▶ tag(Z+1) ▶ master·develop auto-merge ▶ GitHub Release ▶ npm publish ▶ 삭제
+   〔사람 finalize〕▶ tag(Z+1) ▶ 5플랫폼 빌드·테스트·npm publish ▶ (성공 시)master·develop 병합 ▶ GitHub Release ▶ 삭제
 ```
 
 당신은 `develop`으로 PR을 올리고 병합되게 만들면 끝이다. 그 뒤는 파이프라인이 알아서 한다.
@@ -100,8 +102,11 @@ PR 본문의 체크박스(`- [ ]`)는 **작성자가 완료한 항목을 전부 
 
 1. `feature → develop`이 병합되면 파이프라인이 `release/vX.Y.Z` 브랜치를 **자동 생성**한다(아직 태그·배포 없음).
 2. 릴리스 담당자가 "배포 준비 완료" 신호(수동 워크플로 실행)를 주면 태그가 찍히고
-   `release → master`·`release → develop` PR이 자동으로 열려 무인 병합된다.
-3. 두 병합이 끝나면 GitHub Release가 생성되고 → npm에 publish된 뒤 release 브랜치가 삭제된다.
+   `release → master`·`release → develop` PR이 자동으로 열린다.
+3. 태그에서 **5개 플랫폼 빌드·테스트 후 npm publish**가 먼저 돌고, 이게 성공해야 `merge-release`가
+   두 PR을 무인 병합한다 (배포 선행 게이트: 빌드/배포가 깨지면 병합이 막힌다. GitHub auto-merge는
+   publish를 안 기다리므로 쓰지 않는다).
+4. 두 병합이 끝나면 GitHub Release(버전 마커)가 생성되고 release 브랜치가 삭제된다.
 
 즉, 당신의 변경은 develop에 들어간 순간 다음 릴리스 후보가 된다. 배포 타이밍만 릴리스 담당의 판단이다.
 
