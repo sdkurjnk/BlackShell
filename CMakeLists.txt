@@ -51,5 +51,14 @@ target_link_libraries(engine_core PUBLIC ${ENGINE_CLANG_LIBS} ${ENGINE_LLVM_LIBS
 add_executable(blackshell-engine src/engine/main.cpp)
 target_link_libraries(blackshell-engine PRIVATE engine_core)
 
+# publish.yml bundles the LLVM/clang shared libs next to the engine, so make the
+# binary search beside itself: $ORIGIN on ELF, @loader_path on Mach-O (Windows
+# finds sibling DLLs with no rpath). Harmless locally — just an extra search path.
+if(APPLE)
+  set_target_properties(blackshell-engine PROPERTIES BUILD_RPATH "@loader_path")
+elseif(UNIX)
+  set_target_properties(blackshell-engine PROPERTIES BUILD_RPATH "$ORIGIN")
+endif()
+
 add_executable(blackshell-engine-test test/engine/engine_test.cpp)
 target_link_libraries(blackshell-engine-test PRIVATE engine_core)
