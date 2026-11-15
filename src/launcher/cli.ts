@@ -6,6 +6,8 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
+import { dirname, join } from "node:path";
 
 const here = (p: string): string => fileURLToPath(new URL(p, import.meta.url));
 const pkg = JSON.parse(readFileSync(here("../package.json"), "utf8")) as { version: string };
@@ -47,12 +49,19 @@ export function showLevels(levels: string[]): string {
   return levels.join(",");
 }
 
-// Resolve the engine binary: the published package ships a per-platform prebuilt
-// under vendor/<platform>-<arch>/; a local dev build lands in build/.
+// Resolve the engine binary. The published package pulls the matching engine as an
+// optional dependency @sdkurjnk/blackshell-<platform>-<arch> (os/cpu-gated, so npm
+// installs only the host's); resolve its binary. A local dev build in build/ is the
+// fallback when no platform package is installed.
 function enginePath(): string {
   const exe = process.platform === "win32" ? "blackshell-engine.exe" : "blackshell-engine";
-  const vendored = here(`../vendor/${process.platform}-${process.arch}/${exe}`);
-  return existsSync(vendored) ? vendored : here(`../build/${exe}`);
+  const pkg = `@sdkurjnk/blackshell-${process.platform}-${process.arch}`;
+  try {
+    const require = createRequire(import.meta.url);
+    return join(dirname(require.resolve(`${pkg}/package.json`)), exe);
+  } catch {
+    return here(`../build/${exe}`);
+  }
 }
 
 // --- engine (C++) per-unit primitive call; returns the structured token line ---
