@@ -103,22 +103,27 @@ jobs:
           node-version: ${{ matrix.node-version }}
           cache: npm
 
-      # Engine is now built in-process against libLLVM/libclang (#15), so CI needs
-      # the LLVM dev libraries + CMake/Ninja, not just the clang driver. backend.cpp
+      # scripts/build-engine.mjs statically links LLVM/Clang into the engine, so CI
+      # needs the LLVM/Clang dev libraries (static archives + headers). backend.cpp
       # uses the LLVM 21+ Triple API, and Ubuntu's stock llvm-dev lags, so pull a
       # pinned toolchain from apt.llvm.org (pin matches the local dev env, LLVM 23).
-      - name: Install LLVM/Clang 23 dev + CMake + Ninja
+      - name: Install LLVM/Clang 23 dev
         run: |
           wget -O /tmp/llvm.sh https://apt.llvm.org/llvm.sh
           chmod +x /tmp/llvm.sh
           sudo /tmp/llvm.sh 23
-          sudo apt-get install -y llvm-23-dev libclang-23-dev clang-23 cmake ninja-build
+          # libpolly-23-dev: clang codegen references getPollyPluginInfo() -> the
+          # static link needs libPolly.a even though the engine doesn't use Polly.
+          sudo apt-get install -y llvm-23-dev libclang-23-dev clang-23 libpolly-23-dev
 
       - name: Install dependencies
         run: npm ci
 
       - name: Build and test
         run: npm test
-        env:
-          # find_package(LLVM/Clang CONFIG) resolves the versioned install prefix.
-          CMAKE_PREFIX_PATH: /usr/lib/llvm-23
+
+  # Build + test the engine on all 5 shipped platforms (same reusable definition
+  # publish.yml uses for release), so a platform-specific build break surfaces on
+  # the PR instead of only at release time.
+  build-engine:
+    uses: ./.github/workflows/build-engine.yml

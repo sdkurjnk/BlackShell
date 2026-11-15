@@ -7,16 +7,14 @@
     "blackshell": "dist/cli.js"
   },
   "files": [
-    "dist/",
-    "src/",
-    "vendor/"
+    "dist/"
   ],
   "scripts": {
-    "build:engine": "cmake -S . -B build -G Ninja && cmake --build build --target blackshell-engine",
-    "build:engine-test": "cmake -S . -B build -G Ninja && cmake --build build --target blackshell-engine-test",
+    "build:engine": "node scripts/build-engine.mjs",
+    "build:engine-test": "node scripts/build-engine.mjs --test",
     "build:ts": "tsc",
     "build": "npm run build:engine && npm run build:ts",
-    "pretest": "npm run build && npm run build:engine-test",
+    "pretest": "npm run build:engine-test && npm run build:ts",
     "test": "node --test"
   },
   "engines": {

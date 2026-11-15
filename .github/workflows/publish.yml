@@ -17,127 +17,19 @@ name: Publish to npm
 # Auth: an npm granular automation token in the NPM_TOKEN secret. `id-token: write`
 # is kept so npm attaches build provenance (publishConfig.provenance = true).
 #
-# Self-contained (#15): the engine embeds Clang/LLVM in-process (no clang/llc on
-# the user's PATH). Stock LLVM packages are LLVM_LINK_LLVM_DYLIB=ON on every
-# platform, so the engine links libLLVM/libclang-cpp dynamically; we bundle those
-# shared libs beside the binary and the engine finds them via rpath ($ORIGIN /
-# @loader_path; sibling DLLs on Windows). workflow_dispatch builds without
-# publishing, to validate the matrix before cutting a release.
+# Self-contained: scripts/build-engine.mjs statically links Clang/LLVM into one
+# binary (no libLLVM/libclang at runtime, no clang/llc on the user's PATH). The
+# 5-platform build is the reusable build-engine.yml, shared with test.yml so CI and
+# CD build identically. workflow_dispatch builds without publishing, to validate
+# the matrix before cutting a release.
 on:
   push:
     tags: ['v*']
   workflow_dispatch:
 
 jobs:
-  # One native engine per platform. vendor = `${process.platform}-${process.arch}`
-  # so the launcher resolves vendor/<vendor>/blackshell-engine[.exe] directly.
   build-engine:
-    name: Build engine (${{ matrix.vendor }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      # Collect every platform's errors in one run (release builds are rare).
-      fail-fast: false
-      matrix:
-        include:
-          - { os: ubuntu-latest,    vendor: linux-x64,    ext: "" }
-          - { os: ubuntu-24.04-arm, vendor: linux-arm64,  ext: "" }
-          - { os: macos-15-intel,   vendor: darwin-x64,   ext: "" }
-          - { os: macos-latest,     vendor: darwin-arm64, ext: "" }
-          - { os: windows-latest,   vendor: win32-x64,    ext: ".exe" }
-    steps:
-      - uses: actions/checkout@v4
-
-      # --- Linux: apt.llvm.org LLVM 23 (same pin as test.yml) ---
-      - name: Build + bundle (Linux)
-        if: runner.os == 'Linux'
-        shell: bash
-        run: |
-          set -euo pipefail
-          wget -O /tmp/llvm.sh https://apt.llvm.org/llvm.sh
-          chmod +x /tmp/llvm.sh
-          sudo /tmp/llvm.sh 23
-          sudo apt-get install -y llvm-23-dev libclang-23-dev clang-23 cmake ninja-build
-          export CMAKE_PREFIX_PATH=/usr/lib/llvm-23
-          cmake -S . -B build -G Ninja
-          cmake --build build --target blackshell-engine
-          # Gate the merge on the engine actually working on this platform, not just
-          # linking (build-rpath resolves libLLVM from the versioned install dir).
-          cmake --build build --target blackshell-engine-test
-          ./build/blackshell-engine-test
-          out="vendor/${{ matrix.vendor }}"
-          mkdir -p "$out"
-          cp build/blackshell-engine "$out/"
-          # Bundle the LLVM/clang shared objects the engine links against (users
-          # won't have them). Common system libs (libstdc++, libz) are left to the
-          # host. rpath=$ORIGIN (set in CMakeLists) resolves these siblings.
-          for lib in $(ldd "$out/blackshell-engine" | awk '/libLLVM|libclang-cpp/ {print $3}'); do
-            cp -L "$lib" "$out/"
-          done
-          ls -l "$out"
-
-      # --- macOS: Homebrew LLVM ---
-      - name: Build + bundle (macOS)
-        if: runner.os == 'macOS'
-        shell: bash
-        run: |
-          set -euo pipefail
-          brew install llvm cmake ninja
-          CMAKE_PREFIX_PATH="$(brew --prefix llvm)"
-          export CMAKE_PREFIX_PATH
-          cmake -S . -B build -G Ninja
-          cmake --build build --target blackshell-engine
-          cmake --build build --target blackshell-engine-test
-          ./build/blackshell-engine-test
-          out="vendor/${{ matrix.vendor }}"
-          mkdir -p "$out"
-          cp build/blackshell-engine "$out/"
-          # Copy each LLVM/clang dylib the binary references and repoint it at the
-          # @loader_path sibling (rpath=@loader_path set in CMakeLists).
-          for ref in $(otool -L "$out/blackshell-engine" | awk '/libLLVM|libclang-cpp/ {print $1}'); do
-            base="$(basename "$ref")"
-            cp "$(brew --prefix llvm)/lib/$base" "$out/"
-            install_name_tool -change "$ref" "@loader_path/$base" "$out/blackshell-engine"
-          done
-          ls -l "$out"
-
-      # --- Windows: MSYS2 UCRT64 (same toolchain as local dev) ---
-      - name: Setup MSYS2 (Windows)
-        if: runner.os == 'Windows'
-        uses: msys2/setup-msys2@v2
-        with:
-          msystem: UCRT64
-          update: true
-          install: >-
-            mingw-w64-ucrt-x86_64-llvm
-            mingw-w64-ucrt-x86_64-clang
-            mingw-w64-ucrt-x86_64-clang-tools-extra
-            mingw-w64-ucrt-x86_64-cmake
-            mingw-w64-ucrt-x86_64-ninja
-
-      - name: Build + bundle (Windows)
-        if: runner.os == 'Windows'
-        shell: msys2 {0}
-        run: |
-          set -euo pipefail
-          cmake -S . -B build -G Ninja
-          cmake --build build --target blackshell-engine
-          cmake --build build --target blackshell-engine-test
-          ./build/blackshell-engine-test.exe
-          out="vendor/${{ matrix.vendor }}"
-          mkdir -p "$out"
-          cp build/blackshell-engine.exe "$out/"
-          # Bundle every MSYS2 DLL the exe needs (users have no MSYS2). Sibling
-          # DLLs are found automatically on Windows — no rpath needed.
-          for dll in $(ldd "$out/blackshell-engine.exe" | awk '/ucrt64/ {print $3}'); do
-            cp "$dll" "$out/"
-          done
-          ls -l "$out"
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: engine-${{ matrix.vendor }}
-          path: vendor/${{ matrix.vendor }}
-          if-no-files-found: error
+    uses: ./.github/workflows/build-engine.yml
 
   publish:
     name: Publish to npm
@@ -163,28 +55,15 @@ jobs:
           pattern: engine-*
           path: vendor-artifacts
 
-      - name: Assemble vendor/ tree
-        run: |
-          set -e
-          for d in vendor-artifacts/engine-*; do
-            name="${d##*/engine-}"
-            mkdir -p "vendor/$name"
-            cp "$d"/* "vendor/$name/"
-          done
-          # upload-artifact drops file modes; restore exec bit on the unix binaries.
-          chmod +x vendor/linux-*/blackshell-engine vendor/darwin-*/blackshell-engine
-          ls -lR vendor
-
       - name: Install dependencies
         run: npm ci
 
       - name: Build launcher (dist/)
         run: npm run build:ts
 
-      - name: Set package version from the release tag
-        run: npm version "${GITHUB_REF_NAME#v}" --no-git-tag-version --allow-same-version
-
-      - name: Publish
-        run: npm publish
+      # Publishes the 5 per-platform engine packages, then the main launcher package
+      # with them pinned as os/cpu-gated optionalDependencies.
+      - name: Publish platform packages + launcher
+        run: node scripts/publish-packages.mjs "${GITHUB_REF_NAME#v}"
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

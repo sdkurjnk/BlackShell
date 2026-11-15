@@ -1,0 +1,95 @@
+name: Build engine
+
+# Reusable 5-platform engine build. Called by BOTH test.yml (CI, on every PR) and
+# publish.yml (CD, on the version tag) so the engine is built identically in both
+# places -- one definition, no drift between what CI validates and what ships.
+#
+# scripts/build-engine.mjs statically links LLVM/Clang into one self-contained
+# binary, so each block just installs the toolchain, builds + tests, and uploads
+# the single exe (no shared libs to bundle).
+on:
+  workflow_call:
+
+jobs:
+  build-engine:
+    name: Build engine (${{ matrix.vendor }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # Collect every platform's errors in one run.
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest,    vendor: linux-x64,    ext: "" }
+          - { os: ubuntu-24.04-arm, vendor: linux-arm64,  ext: "" }
+          - { os: macos-15-intel,   vendor: darwin-x64,   ext: "" }
+          - { os: macos-latest,     vendor: darwin-arm64, ext: "" }
+          - { os: windows-latest,   vendor: win32-x64,    ext: ".exe" }
+    steps:
+      - uses: actions/checkout@v4
+
+      # --- Linux: apt.llvm.org LLVM 23 ---
+      - name: Build + test (Linux)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          wget -O /tmp/llvm.sh https://apt.llvm.org/llvm.sh
+          chmod +x /tmp/llvm.sh
+          sudo /tmp/llvm.sh 23
+          # libpolly-23-dev: clang's codegen references getPollyPluginInfo(), so the
+          # static link needs libPolly.a even though the engine doesn't use Polly.
+          sudo apt-get install -y llvm-23-dev libclang-23-dev clang-23 libpolly-23-dev
+          node scripts/build-engine.mjs --test
+          # Gate the merge on the engine actually working on this platform.
+          ./build/blackshell-engine-test src/engine/examples/add2.c
+          out="vendor/${{ matrix.vendor }}"
+          mkdir -p "$out"
+          cp build/blackshell-engine "$out/"
+          ls -l "$out"
+
+      # --- macOS: Homebrew LLVM ---
+      - name: Build + test (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          brew install llvm
+          node scripts/build-engine.mjs --test
+          ./build/blackshell-engine-test src/engine/examples/add2.c
+          out="vendor/${{ matrix.vendor }}"
+          mkdir -p "$out"
+          cp build/blackshell-engine "$out/"
+          ls -l "$out"
+
+      # --- Windows: MSYS2 UCRT64 toolchain, driven from pwsh so Windows node runs
+      #     the build script while g++/llvm-config resolve from the UCRT64 bin. ---
+      - name: Setup MSYS2 (Windows)
+        if: runner.os == 'Windows'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-llvm
+            mingw-w64-ucrt-x86_64-clang
+
+      - name: Build + test (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:Path = "$env:RUNNER_TEMP\msys64\ucrt64\bin;$env:Path"
+          node scripts/build-engine.mjs --test
+          if ($LASTEXITCODE) { exit 1 }
+          & build/blackshell-engine-test.exe src/engine/examples/add2.c
+          if ($LASTEXITCODE) { exit 1 }
+          $out = "vendor/${{ matrix.vendor }}"
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          Copy-Item build/blackshell-engine.exe "$out/"
+          Get-ChildItem $out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: engine-${{ matrix.vendor }}
+          path: vendor/${{ matrix.vendor }}
+          if-no-files-found: error
