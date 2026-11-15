@@ -83,13 +83,18 @@ const llvmLibs = tokens(LC, ["--link-static", "--libs", "all"]).filter((t) => {
   return !m || existsSync(join(libdir, `lib${m[1]}.a`));
 });
 
-// Embed LLVM's extra deps by linking their static archive when available (keeps
-// the binary self-contained); fall back to dynamic for genuine OS libs
-// (-lm/-ldl/-lpthread, macOS SDK -lz, Windows -lshell32, ...).
+// Core OS libs that must stay dynamic -- never embed their static archive. On
+// Linux a stray libm.a exists in the system lib dir, and static-linking it drags
+// in e_logf128.o/e_logl.o whose internals (__frexpf128/__frexpl) are unresolved.
+const OS_LIBS = new Set(["m", "c", "dl", "rt", "pthread", "gcc_s", "util", "resolv", "nsl", "anl"]);
+
+// Embed LLVM's extra deps (zstd, xml2, ...) by linking their static archive when
+// available (keeps the binary self-contained); genuine OS libs stay dynamic.
 const sysLibs = tokens(LC, ["--link-static", "--system-libs"]).flatMap((t) => {
   const m = /^-l(.+)$/.exec(t);
   if (!m) return [t];
   const name = m[1] === "zstd.dll" ? "zstd" : m[1];
+  if (OS_LIBS.has(name)) return [`-l${name}`];
   for (const d of extraDirs) {
     const a = join(d, `lib${name}.a`);
     if (existsSync(a)) return [a];
