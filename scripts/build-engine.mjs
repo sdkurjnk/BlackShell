@@ -109,12 +109,12 @@ const clangArchives = readdirSync(libdir)
 // Embed the C++ runtime so the binary is self-contained. macOS has no static
 // libc/libc++ (and ld64 has no --start-group), so there it stays dynamic against
 // the always-present system libs; Linux keeps glibc dynamic.
-// Linux links libstdc++/libm dynamically (universal on Linux, and -static-libstdc++
-// puts libstdc++.a after -lm -> unresolved __frexpf128). LLVM/Clang stay static
-// either way, which is the point.
+// Linux links the C/C++ runtime and libm dynamically (all universal on Linux).
+// -static-libgcc drags in static libm.a, whose extended-precision objects
+// (e_logl/e_logf128) have unresolved internals (__frexpl/__frexpf128) -- so keep
+// it dynamic. LLVM/Clang stay statically embedded regardless, which is the point.
 const staticRuntime =
   OS === "win32" ? ["-static", "-static-libgcc", "-static-libstdc++"] :
-  OS === "linux" ? ["-static-libgcc"] :
   [];
 const stripAndGc = OS === "darwin" ? ["-Wl,-dead_strip"] : ["-Wl,--gc-sections", "-s"];
 const groupStart = OS === "darwin" ? [] : ["-Wl,--start-group"];
