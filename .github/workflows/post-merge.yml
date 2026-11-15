@@ -3,9 +3,9 @@ name: Post-merge Release
 # contributing-gitflow.md step 2 (and §5 for hotfix). Fires when a release/* or
 # hotfix/* PR merges into master OR develop. It waits until BOTH the ->master and
 # ->develop PRs for that branch are merged, then:
-#   1. creates the GitHub Release (version marker; package publishing is deferred
-#      until the language/toolchain is chosen -- see BlackShell_Plan.md §9. Once a
-#      publish.yml exists it can hook `release: published`.)
+#   1. creates the GitHub Release (a version marker only -- npm publishing already
+#      happened on the version tag BEFORE the merge, in publish.yml, which is what
+#      gated this merge; see merge-release.yml)
 #   2. deletes the branch (which releases the Serialize Guard for the next feature)
 #
 # Ordering matters: delete ONLY after both merge, else an open back-merge PR whose

@@ -7,35 +7,41 @@ name: Merge Release / Hotfix
 #
 # Bypass is a permission to MERGE despite a rule, not an automatic action: it only
 # takes effect when the bypass actor actually performs the merge. So here the App
-# merges the PRs DIRECTLY (pulls.merge) once CI is green. The App is a bypass actor on
-# require-approval, so the approval rule is bypassed. require-ci-* have no bypass but
-# are already satisfied -- that is exactly what "Run Tests" success means -- and
-# require-uptodate-develop is bypassed too. See contributing-gitflow.md step 2.
+# merges the PRs DIRECTLY (pulls.merge) once the gates are green. The App is a bypass
+# actor on require-approval, so the approval rule is bypassed. require-ci-* have no
+# bypass but are already satisfied, and require-uptodate-develop is bypassed too.
+# See contributing-gitflow.md step 2.
 #
-# Triggered by workflow_run (not pull_request) because at finalize time CI is still
-# pending; we can only merge once the checks report success. This file must live on
-# the default branch (master) for workflow_run to fire.
+# Publish-before-merge gate: the merge waits until BOTH gating workflows succeed on
+# the head commit -- "Run Tests" (PR governance + Linux tests) AND "Publish to npm"
+# (5-platform build+test, then the actual npm publish, fired by finalize's version
+# tag). So a broken platform build or a failed publish blocks the merge. Both runs
+# share the same head commit (the tag points at the release-branch tip), so we gate
+# on head_sha, not head_branch.
+#
+# Triggered by workflow_run (not pull_request) because at finalize time the gates are
+# still pending; we can only merge once they report success. Either workflow's
+# completion re-evaluates the gate. This file must live on the default branch
+# (master) for workflow_run to fire.
 on:
   workflow_run:
-    workflows: ["Run Tests"]
+    workflows: ["Run Tests", "Publish to npm"]
     types: [completed]
 
-# Both release PRs share the same head branch and their two Run Tests runs finish near
-# each other. Serialize per-branch and keep pulls.merge idempotent (405/409 tolerated)
+# The two release PRs and the publish run all share one head commit and finish near
+# each other. Serialize per-commit and keep pulls.merge idempotent (405/409 tolerated)
 # so we never double-merge or fail on an already-merged PR.
 concurrency:
-  group: merge-release-${{ github.event.workflow_run.head_branch }}
+  group: merge-release-${{ github.event.workflow_run.head_sha }}
   cancel-in-progress: false
 
 jobs:
   merge:
     name: Merge release/hotfix PRs directly
     runs-on: ubuntu-latest
-    # Only for a green Run Tests on a release/* or hotfix/* head.
-    if: >
-      github.event.workflow_run.conclusion == 'success' &&
-      (startsWith(github.event.workflow_run.head_branch, 'release/') ||
-       startsWith(github.event.workflow_run.head_branch, 'hotfix/'))
+    # Skip failed trigger runs; the other workflow's completion re-evaluates. The
+    # script confirms BOTH gates are green before merging.
+    if: github.event.workflow_run.conclusion == 'success'
     steps:
       - name: Generate GitHub App token
         id: app-token
@@ -52,15 +58,37 @@ jobs:
           github-token: ${{ steps.app-token.outputs.token }}
           script: |
             const { owner, repo } = context.repo;
-            const branch = context.payload.workflow_run.head_branch;
+            const sha = context.payload.workflow_run.head_sha;
 
-            const prs = await github.paginate(github.rest.pulls.list, {
-              owner, repo, state: 'open', head: `${owner}:${branch}`, per_page: 100,
+            // Open release/hotfix -> master/develop PRs at THIS commit. Keyed by sha
+            // (not branch) so the tag-fired "Publish to npm" run re-evaluates too.
+            const open = await github.paginate(github.rest.pulls.list, {
+              owner, repo, state: 'open', per_page: 100,
             });
-            const targets = prs.filter(p => ['master', 'develop'].includes(p.base.ref));
+            const targets = open.filter(p =>
+              p.head.sha === sha &&
+              (p.head.ref.startsWith('release/') || p.head.ref.startsWith('hotfix/')) &&
+              ['master', 'develop'].includes(p.base.ref));
             if (targets.length === 0) {
-              core.notice(`No open ${branch} -> master/develop PRs; nothing to merge.`);
+              core.notice(`No open release/hotfix -> master/develop PRs at ${sha.slice(0, 7)}.`);
               return;
+            }
+
+            // Publish-before-merge gate: require BOTH workflows green on this commit.
+            // Either one's completion re-runs us; the slow/failed one holds the merge.
+            const runs = await github.paginate(github.rest.actions.listWorkflowRunsForRepo, {
+              owner, repo, head_sha: sha, per_page: 100,
+            });
+            for (const name of ['Run Tests', 'Publish to npm']) {
+              const latest = runs
+                .filter(r => r.name === name)
+                .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0];
+              if (!latest || latest.status !== 'completed' || latest.conclusion !== 'success') {
+                core.notice(`Gate '${name}' not green on ${sha.slice(0, 7)} ` +
+                  `(status=${latest?.status ?? 'none'}, conclusion=${latest?.conclusion ?? 'none'}); ` +
+                  `will retry when it completes.`);
+                return;
+              }
             }
 
             for (const pr of targets) {
@@ -68,10 +96,10 @@ jobs:
                 await github.rest.pulls.merge({
                   owner, repo, pull_number: pr.number, merge_method: 'merge',
                 });
-                core.notice(`Merged #${pr.number} (${branch} -> ${pr.base.ref}).`);
+                core.notice(`Merged #${pr.number} (${pr.head.ref} -> ${pr.base.ref}).`);
               } catch (e) {
                 // 405: not mergeable yet (the OTHER PR's checks may still be pending) --
-                //      that PR's own Run Tests completion re-triggers this workflow.
+                //      that PR's own run completion re-triggers this workflow.
                 // 409: base moved between list and merge -- same re-trigger covers it.
                 if (e.status === 405 || e.status === 409) {
                   core.warning(`#${pr.number} not mergeable yet (${e.status}); will retry on next run.`);

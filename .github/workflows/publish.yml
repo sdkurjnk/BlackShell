@@ -1,14 +1,18 @@
 name: Publish to npm
 
-# Fires when post-merge.yml creates the GitHub Release (release: published).
-# Builds the native engine for every supported platform, bundles the binary plus
-# the LLVM/clang shared libs it links against under vendor/<platform>-<arch>/, and
-# publishes @sdkurjnk/blackshell to npm. The launcher (dist/cli.js) picks the
-# matching vendor/ binary at runtime; a local dev build in build/ is the fallback
-# (see src/launcher/cli.ts).
+# Fires on the version tag vX.Y.Z that finalize.yml creates -- i.e. BEFORE the
+# release/hotfix PRs merge. Builds + tests the native engine on every platform,
+# bundles the binary plus the LLVM/clang shared libs it links against under
+# vendor/<platform>-<arch>/, and publishes @sdkurjnk/blackshell to npm. The
+# launcher (dist/cli.js) picks the matching vendor/ binary at runtime; a local dev
+# build in build/ is the fallback (see src/launcher/cli.ts).
 #
-# Version comes from the release tag vX.Y.Z (written into package.json at publish
-# time), so no version-bump commit is needed in the release branch.
+# Publish-before-merge: merge-release.yml holds the ->master/->develop merge until
+# THIS run succeeds, so a broken build on any platform (or a failed npm publish)
+# blocks the merge instead of surfacing only after the release is tagged.
+#
+# Version comes from the tag vX.Y.Z (written into package.json at publish time),
+# so no version-bump commit is needed in the release branch.
 #
 # Auth: an npm granular automation token in the NPM_TOKEN secret. `id-token: write`
 # is kept so npm attaches build provenance (publishConfig.provenance = true).
@@ -20,8 +24,8 @@ name: Publish to npm
 # @loader_path; sibling DLLs on Windows). workflow_dispatch builds without
 # publishing, to validate the matrix before cutting a release.
 on:
-  release:
-    types: [published]
+  push:
+    tags: ['v*']
   workflow_dispatch:
 
 jobs:
@@ -56,6 +60,10 @@ jobs:
           export CMAKE_PREFIX_PATH=/usr/lib/llvm-23
           cmake -S . -B build -G Ninja
           cmake --build build --target blackshell-engine
+          # Gate the merge on the engine actually working on this platform, not just
+          # linking (build-rpath resolves libLLVM from the versioned install dir).
+          cmake --build build --target blackshell-engine-test
+          ./build/blackshell-engine-test
           out="vendor/${{ matrix.vendor }}"
           mkdir -p "$out"
           cp build/blackshell-engine "$out/"
@@ -74,9 +82,12 @@ jobs:
         run: |
           set -euo pipefail
           brew install llvm cmake ninja
-          export CMAKE_PREFIX_PATH="$(brew --prefix llvm)"
+          CMAKE_PREFIX_PATH="$(brew --prefix llvm)"
+          export CMAKE_PREFIX_PATH
           cmake -S . -B build -G Ninja
           cmake --build build --target blackshell-engine
+          cmake --build build --target blackshell-engine-test
+          ./build/blackshell-engine-test
           out="vendor/${{ matrix.vendor }}"
           mkdir -p "$out"
           cp build/blackshell-engine "$out/"
@@ -110,6 +121,8 @@ jobs:
           set -euo pipefail
           cmake -S . -B build -G Ninja
           cmake --build build --target blackshell-engine
+          cmake --build build --target blackshell-engine-test
+          ./build/blackshell-engine-test.exe
           out="vendor/${{ matrix.vendor }}"
           mkdir -p "$out"
           cp build/blackshell-engine.exe "$out/"
@@ -129,8 +142,8 @@ jobs:
   publish:
     name: Publish to npm
     needs: build-engine
-    # Only publish on a real release; workflow_dispatch is a build-only dry run.
-    if: github.event_name == 'release'
+    # Publish only on the version tag; workflow_dispatch is a build-only dry run.
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
       contents: read
