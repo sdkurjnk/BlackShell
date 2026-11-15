@@ -47,8 +47,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # scripts/build-engine.mjs statically links LLVM/Clang into one binary, so
+      # each block just installs the toolchain, builds+tests, and copies the single
+      # exe — no shared libs to bundle (self-contained; see the script header).
+
       # --- Linux: apt.llvm.org LLVM 23 (same pin as test.yml) ---
-      - name: Build + bundle (Linux)
+      - name: Build + test (Linux)
         if: runner.os == 'Linux'
         shell: bash
         run: |
@@ -56,51 +60,31 @@ jobs:
           wget -O /tmp/llvm.sh https://apt.llvm.org/llvm.sh
           chmod +x /tmp/llvm.sh
           sudo /tmp/llvm.sh 23
-          sudo apt-get install -y llvm-23-dev libclang-23-dev clang-23 cmake ninja-build
-          export CMAKE_PREFIX_PATH=/usr/lib/llvm-23
-          cmake -S . -B build -G Ninja
-          cmake --build build --target blackshell-engine
-          # Gate the merge on the engine actually working on this platform, not just
-          # linking (build-rpath resolves libLLVM from the versioned install dir).
-          cmake --build build --target blackshell-engine-test
-          ./build/blackshell-engine-test
+          sudo apt-get install -y llvm-23-dev libclang-23-dev clang-23
+          node scripts/build-engine.mjs --test
+          # Gate the merge on the engine actually working on this platform.
+          ./build/blackshell-engine-test src/engine/examples/add2.c
           out="vendor/${{ matrix.vendor }}"
           mkdir -p "$out"
           cp build/blackshell-engine "$out/"
-          # Bundle the LLVM/clang shared objects the engine links against (users
-          # won't have them). Common system libs (libstdc++, libz) are left to the
-          # host. rpath=$ORIGIN (set in CMakeLists) resolves these siblings.
-          for lib in $(ldd "$out/blackshell-engine" | awk '/libLLVM|libclang-cpp/ {print $3}'); do
-            cp -L "$lib" "$out/"
-          done
           ls -l "$out"
 
       # --- macOS: Homebrew LLVM ---
-      - name: Build + bundle (macOS)
+      - name: Build + test (macOS)
         if: runner.os == 'macOS'
         shell: bash
         run: |
           set -euo pipefail
-          brew install llvm cmake ninja
-          CMAKE_PREFIX_PATH="$(brew --prefix llvm)"
-          export CMAKE_PREFIX_PATH
-          cmake -S . -B build -G Ninja
-          cmake --build build --target blackshell-engine
-          cmake --build build --target blackshell-engine-test
-          ./build/blackshell-engine-test
+          brew install llvm
+          node scripts/build-engine.mjs --test
+          ./build/blackshell-engine-test src/engine/examples/add2.c
           out="vendor/${{ matrix.vendor }}"
           mkdir -p "$out"
           cp build/blackshell-engine "$out/"
-          # Copy each LLVM/clang dylib the binary references and repoint it at the
-          # @loader_path sibling (rpath=@loader_path set in CMakeLists).
-          for ref in $(otool -L "$out/blackshell-engine" | awk '/libLLVM|libclang-cpp/ {print $1}'); do
-            base="$(basename "$ref")"
-            cp "$(brew --prefix llvm)/lib/$base" "$out/"
-            install_name_tool -change "$ref" "@loader_path/$base" "$out/blackshell-engine"
-          done
           ls -l "$out"
 
-      # --- Windows: MSYS2 UCRT64 (same toolchain as local dev) ---
+      # --- Windows: MSYS2 UCRT64 toolchain, driven from pwsh so Windows node runs
+      #     the build script while g++/llvm-config resolve from the UCRT64 bin. ---
       - name: Setup MSYS2 (Windows)
         if: runner.os == 'Windows'
         uses: msys2/setup-msys2@v2
@@ -108,30 +92,23 @@ jobs:
           msystem: UCRT64
           update: true
           install: >-
+            mingw-w64-ucrt-x86_64-gcc
             mingw-w64-ucrt-x86_64-llvm
             mingw-w64-ucrt-x86_64-clang
-            mingw-w64-ucrt-x86_64-clang-tools-extra
-            mingw-w64-ucrt-x86_64-cmake
-            mingw-w64-ucrt-x86_64-ninja
 
-      - name: Build + bundle (Windows)
+      - name: Build + test (Windows)
         if: runner.os == 'Windows'
-        shell: msys2 {0}
+        shell: pwsh
         run: |
-          set -euo pipefail
-          cmake -S . -B build -G Ninja
-          cmake --build build --target blackshell-engine
-          cmake --build build --target blackshell-engine-test
-          ./build/blackshell-engine-test.exe
-          out="vendor/${{ matrix.vendor }}"
-          mkdir -p "$out"
-          cp build/blackshell-engine.exe "$out/"
-          # Bundle every MSYS2 DLL the exe needs (users have no MSYS2). Sibling
-          # DLLs are found automatically on Windows — no rpath needed.
-          for dll in $(ldd "$out/blackshell-engine.exe" | awk '/ucrt64/ {print $3}'); do
-            cp "$dll" "$out/"
-          done
-          ls -l "$out"
+          $env:Path = "$env:RUNNER_TEMP\msys64\ucrt64\bin;$env:Path"
+          node scripts/build-engine.mjs --test
+          if ($LASTEXITCODE) { exit 1 }
+          & build/blackshell-engine-test.exe src/engine/examples/add2.c
+          if ($LASTEXITCODE) { exit 1 }
+          $out = "vendor/${{ matrix.vendor }}"
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          Copy-Item build/blackshell-engine.exe "$out/"
+          Get-ChildItem $out
 
       - uses: actions/upload-artifact@v4
         with:
