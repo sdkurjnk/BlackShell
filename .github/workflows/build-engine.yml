@@ -36,7 +36,9 @@ jobs:
           wget -O /tmp/llvm.sh https://apt.llvm.org/llvm.sh
           chmod +x /tmp/llvm.sh
           sudo /tmp/llvm.sh 23
-          sudo apt-get install -y llvm-23-dev libclang-23-dev clang-23
+          # libpolly-23-dev: clang's codegen references getPollyPluginInfo(), so the
+          # static link needs libPolly.a even though the engine doesn't use Polly.
+          sudo apt-get install -y llvm-23-dev libclang-23-dev clang-23 libpolly-23-dev
           node scripts/build-engine.mjs --test
           # Gate the merge on the engine actually working on this platform.
           ./build/blackshell-engine-test src/engine/examples/add2.c

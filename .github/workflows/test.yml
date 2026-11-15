@@ -112,7 +112,9 @@ jobs:
           wget -O /tmp/llvm.sh https://apt.llvm.org/llvm.sh
           chmod +x /tmp/llvm.sh
           sudo /tmp/llvm.sh 23
-          sudo apt-get install -y llvm-23-dev libclang-23-dev clang-23
+          # libpolly-23-dev: clang codegen references getPollyPluginInfo() -> the
+          # static link needs libPolly.a even though the engine doesn't use Polly.
+          sudo apt-get install -y llvm-23-dev libclang-23-dev clang-23 libpolly-23-dev
 
       - name: Install dependencies
         run: npm ci
