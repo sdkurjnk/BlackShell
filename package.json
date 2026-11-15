@@ -7,9 +7,7 @@
     "blackshell": "dist/cli.js"
   },
   "files": [
-    "dist/",
-    "src/",
-    "vendor/"
+    "dist/"
   ],
   "scripts": {
     "build:engine": "node scripts/build-engine.mjs",
