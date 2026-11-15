@@ -1,10 +1,11 @@
 name: Publish to npm
 
 # Fires when post-merge.yml creates the GitHub Release (release: published).
-# Builds the native engine for every supported platform, bundles the binaries
-# under vendor/<platform>-<arch>/, and publishes @sdkurjnk/blackshell to npm.
-# The launcher (dist/cli.js) picks the matching vendor/ binary at runtime; a
-# local dev build in build/ is the fallback (see src/launcher/cli.ts).
+# Builds the native engine for every supported platform, bundles the binary plus
+# the LLVM/clang shared libs it links against under vendor/<platform>-<arch>/, and
+# publishes @sdkurjnk/blackshell to npm. The launcher (dist/cli.js) picks the
+# matching vendor/ binary at runtime; a local dev build in build/ is the fallback
+# (see src/launcher/cli.ts).
 #
 # Version comes from the release tag vX.Y.Z (written into package.json at publish
 # time), so no version-bump commit is needed in the release branch.
@@ -12,12 +13,16 @@ name: Publish to npm
 # Auth: an npm granular automation token in the NPM_TOKEN secret. `id-token: write`
 # is kept so npm attaches build provenance (publishConfig.provenance = true).
 #
-# NOTE: prebuilt engine only removes the compile step. `enshell` still shells out
-# to clang/llc at runtime, so installers need an LLVM toolchain on PATH until the
-# engine links libLLVM in-process.
+# Self-contained (#15): the engine embeds Clang/LLVM in-process (no clang/llc on
+# the user's PATH). Stock LLVM packages are LLVM_LINK_LLVM_DYLIB=ON on every
+# platform, so the engine links libLLVM/libclang-cpp dynamically; we bundle those
+# shared libs beside the binary and the engine finds them via rpath ($ORIGIN /
+# @loader_path; sibling DLLs on Windows). workflow_dispatch builds without
+# publishing, to validate the matrix before cutting a release.
 on:
   release:
     types: [published]
+  workflow_dispatch:
 
 jobs:
   # One native engine per platform. vendor = `${process.platform}-${process.arch}`
@@ -37,27 +42,93 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install clang (Linux)
+      # --- Linux: apt.llvm.org LLVM 23 (same pin as test.yml) ---
+      - name: Build + bundle (Linux)
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y clang
-
-      - name: Compile engine with clang++
         shell: bash
         run: |
-          mkdir -p "vendor/${{ matrix.vendor }}"
-          clang++ -std=c++17 -O2 -o "vendor/${{ matrix.vendor }}/blackshell-engine${{ matrix.ext }}" \
-            src/engine/main.cpp src/engine/driver.cpp src/engine/frontend.cpp \
-            src/engine/gate.cpp src/engine/noising.cpp src/engine/harness.cpp src/engine/backend.cpp
+          set -euo pipefail
+          wget -O /tmp/llvm.sh https://apt.llvm.org/llvm.sh
+          chmod +x /tmp/llvm.sh
+          sudo /tmp/llvm.sh 23
+          sudo apt-get install -y llvm-23-dev libclang-23-dev clang-23 cmake ninja-build
+          export CMAKE_PREFIX_PATH=/usr/lib/llvm-23
+          cmake -S . -B build -G Ninja
+          cmake --build build --target blackshell-engine
+          out="vendor/${{ matrix.vendor }}"
+          mkdir -p "$out"
+          cp build/blackshell-engine "$out/"
+          # Bundle the LLVM/clang shared objects the engine links against (users
+          # won't have them). Common system libs (libstdc++, libz) are left to the
+          # host. rpath=$ORIGIN (set in CMakeLists) resolves these siblings.
+          for lib in $(ldd "$out/blackshell-engine" | awk '/libLLVM|libclang-cpp/ {print $3}'); do
+            cp -L "$lib" "$out/"
+          done
+          ls -l "$out"
+
+      # --- macOS: Homebrew LLVM ---
+      - name: Build + bundle (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          brew install llvm cmake ninja
+          export CMAKE_PREFIX_PATH="$(brew --prefix llvm)"
+          cmake -S . -B build -G Ninja
+          cmake --build build --target blackshell-engine
+          out="vendor/${{ matrix.vendor }}"
+          mkdir -p "$out"
+          cp build/blackshell-engine "$out/"
+          # Copy each LLVM/clang dylib the binary references and repoint it at the
+          # @loader_path sibling (rpath=@loader_path set in CMakeLists).
+          for ref in $(otool -L "$out/blackshell-engine" | awk '/libLLVM|libclang-cpp/ {print $1}'); do
+            base="$(basename "$ref")"
+            cp "$(brew --prefix llvm)/lib/$base" "$out/"
+            install_name_tool -change "$ref" "@loader_path/$base" "$out/blackshell-engine"
+          done
+          ls -l "$out"
+
+      # --- Windows: MSYS2 UCRT64 (same toolchain as local dev) ---
+      - name: Setup MSYS2 (Windows)
+        if: runner.os == 'Windows'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-llvm
+            mingw-w64-ucrt-x86_64-clang
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
+
+      - name: Build + bundle (Windows)
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          cmake -S . -B build -G Ninja
+          cmake --build build --target blackshell-engine
+          out="vendor/${{ matrix.vendor }}"
+          mkdir -p "$out"
+          cp build/blackshell-engine.exe "$out/"
+          # Bundle every MSYS2 DLL the exe needs (users have no MSYS2). Sibling
+          # DLLs are found automatically on Windows — no rpath needed.
+          for dll in $(ldd "$out/blackshell-engine.exe" | awk '/ucrt64/ {print $3}'); do
+            cp "$dll" "$out/"
+          done
+          ls -l "$out"
 
       - uses: actions/upload-artifact@v4
         with:
           name: engine-${{ matrix.vendor }}
-          path: vendor/${{ matrix.vendor }}/blackshell-engine${{ matrix.ext }}
+          path: vendor/${{ matrix.vendor }}
           if-no-files-found: error
 
   publish:
     name: Publish to npm
     needs: build-engine
+    # Only publish on a real release; workflow_dispatch is a build-only dry run.
+    if: github.event_name == 'release'
     runs-on: ubuntu-latest
     permissions:
       contents: read

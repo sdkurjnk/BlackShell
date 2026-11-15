@@ -1,4 +1,9 @@
 #include "engine.hpp"
+
+#include "llvm/IR/LLVMContext.h"
+#include "llvm/IR/Module.h"
+#include "llvm/Transforms/Utils/Cloning.h"
+
 #include <cstdio>
 #include <string>
 
@@ -9,9 +14,12 @@ static std::string stem(const std::string& path) {
     return (d == std::string::npos) ? base : base.substr(0, d);
 }
 
-// Gate verdict only (preview before staging). Dummy gate accepts everything.
+// Gate verdict only (preview before staging). Compiles to IR, then gates it.
 int driver_check(const std::string& src) {
-    if (!gate_check(src)) { std::printf("gate.reject %s\n", src.c_str()); return EXIT_REJECT; }
+    llvm::LLVMContext ctx;
+    std::unique_ptr<llvm::Module> m = frontend_compile(src, ctx);
+    if (!m) { std::printf("frontend.failed %s\n", src.c_str()); return EXIT_ERR; }
+    if (!gate_check(*m)) { std::printf("gate.reject %s\n", src.c_str()); return EXIT_REJECT; }
     std::printf("gate.ok %s\n", src.c_str());
     return EXIT_OK;
 }
@@ -19,15 +27,17 @@ int driver_check(const std::string& src) {
 // Enshell pipeline: frontend -> gate -> noising -> backend -> artifact. Emits
 // structured tokens on stdout; the Launcher renders them.
 int driver_enshell(const std::string& src) {
-    const std::string base = stem(src), ir = base + ".ll", obj = base + ".o";
-    if (!frontend_compile(src, ir)) { std::printf("frontend.failed %s\n", src.c_str()); return EXIT_ERR; }
-    if (!gate_check(ir)) { std::remove(ir.c_str()); std::printf("gate.reject %s\n", src.c_str()); return EXIT_REJECT; }
-    if (!noising_apply(ir)) { std::remove(ir.c_str()); std::printf("noising.failed %s\n", src.c_str()); return EXIT_ERR; }
-    // baseline == transformed here (identity noising in place); real noising
-    // yields a distinct transformed IR while the baseline is the L0 (pre-noise) IR.
-    if (!harness_verify(ir, ir)) { std::remove(ir.c_str()); std::printf("verify.broken %s\n", src.c_str()); return EXIT_ERR; }
-    if (!backend_emit(ir, obj)) { std::remove(ir.c_str()); std::printf("backend.failed %s\n", src.c_str()); return EXIT_ERR; }
-    std::remove(ir.c_str());
+    const std::string obj = stem(src) + ".o";
+    llvm::LLVMContext ctx;
+    std::unique_ptr<llvm::Module> m = frontend_compile(src, ctx);
+    if (!m) { std::printf("frontend.failed %s\n", src.c_str()); return EXIT_ERR; }
+    if (!gate_check(*m)) { std::printf("gate.reject %s\n", src.c_str()); return EXIT_REJECT; }
+    // L0 baseline: snapshot before noising so the harness compares against the
+    // pre-noise Module (identity noising makes them equal for now).
+    std::unique_ptr<llvm::Module> baseline = llvm::CloneModule(*m);
+    if (!noising_apply(*m)) { std::printf("noising.failed %s\n", src.c_str()); return EXIT_ERR; }
+    if (!harness_verify(*baseline, *m)) { std::printf("verify.broken %s\n", src.c_str()); return EXIT_ERR; }
+    if (!backend_emit(*m, obj)) { std::printf("backend.failed %s\n", src.c_str()); return EXIT_ERR; }
     std::printf("sealed %s %s\n", src.c_str(), obj.c_str());
     return EXIT_OK;
 }
