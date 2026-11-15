@@ -4,10 +4,10 @@ name: Finish Release / Hotfix
 # "ship it" -- then everything is unattended:
 #   1. tag vX.Y.Z at the release/hotfix tip
 #   2. open branch->master and branch->develop PRs (App token, so test.yml triggers)
-#   3. enable auto-merge on both as a FALLBACK (fires only if a human approves)
-# The real merge is done by merge-release.yml: the App merges directly once CI is
-# green, which is what actually bypasses require-approval -- GitHub auto-merge does NOT
-# use the App's ruleset bypass, so on its own it would sit at REVIEW_REQUIRED forever.
+# Merging is done by merge-release.yml: the App merges both PRs directly once CI AND
+# the npm publish are green (the App bypasses require-approval). We do NOT enable
+# GitHub auto-merge -- it fires on the ruleset's required checks (Run Tests) alone,
+# which would merge before publish finishes and bypass the publish-before-merge gate.
 # The GitHub Release + branch deletion happen later in post-merge.yml, only after
 # BOTH PRs merge (2-x is not a synchronous continuation).
 #
@@ -104,18 +104,9 @@ jobs:
               } else {
                 core.notice(`Reusing existing ${branch} -> ${base} (#${pr.number}).`);
               }
-              // Enable auto-merge as a FALLBACK only (fires if a human approves).
-              // The primary merge path is merge-release.yml, where the App merges
-              // directly once CI is green -- auto-merge does NOT use the App's bypass.
-              await github.graphql(
-                `mutation($id: ID!) {
-                   enablePullRequestAutoMerge(input: { pullRequestId: $id, mergeMethod: MERGE }) {
-                     pullRequest { number }
-                   }
-                 }`,
-                { id: pr.node_id }
-              );
-              core.info(`Auto-merge enabled on #${pr.number}.`);
+              // Do NOT enable GitHub auto-merge: it merges on the ruleset's required
+              // checks (Run Tests) alone, racing ahead of the npm publish. merge-release.yml
+              // is the only merge path and gates on both CI and publish succeeding.
             }
 
             await openPr('master');
