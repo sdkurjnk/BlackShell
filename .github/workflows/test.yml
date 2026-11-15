@@ -119,3 +119,9 @@ jobs:
 
       - name: Build and test
         run: npm test
+
+  # Build + test the engine on all 5 shipped platforms (same reusable definition
+  # publish.yml uses for release), so a platform-specific build break surfaces on
+  # the PR instead of only at release time.
+  build-engine:
+    uses: ./.github/workflows/build-engine.yml

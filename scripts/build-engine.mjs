@@ -15,7 +15,7 @@
 // Env overrides: LLVM_CONFIG (path to llvm-config), CXX (compiler).
 
 import { execFileSync } from "node:child_process";
-import { readdirSync, mkdirSync } from "node:fs";
+import { readdirSync, mkdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
 
 const OS = process.platform; // 'win32' | 'linux' | 'darwin'
@@ -61,11 +61,42 @@ const cxxflags = [
 
 const libdir = sh(LC, ["--libdir"]);
 const ldflags = tokens(LC, ["--ldflags"]);
-const llvmLibs = tokens(LC, ["--link-static", "--libs", "all"]);
-// Windows: `-lzstd.dll` names the import lib; use the static archive instead.
-const sysLibs = tokens(LC, ["--link-static", "--system-libs"]).map((t) =>
-  t === "-lzstd.dll" ? "-lzstd" : t
-);
+
+// Dirs where LLVM's own deps (zstd, xml2, ...) may live. On macOS, Homebrew's
+// prefix (and keg-only kegs) aren't on the default linker path -- esp. arm64's
+// /opt/homebrew -- so add them for both static lookup and the dynamic fallback.
+const extraDirs = [libdir];
+if (OS === "darwin") {
+  const brew = sh("brew", ["--prefix"]);
+  extraDirs.push(join(brew, "lib"));
+  for (const f of ["zstd", "libxml2"]) {
+    try { extraDirs.push(join(sh("brew", ["--prefix", f]), "lib")); } catch {}
+  }
+} else if (OS === "linux") {
+  extraDirs.push("/usr/lib", `/usr/lib/${process.arch === "arm64" ? "aarch64" : "x86_64"}-linux-gnu`);
+}
+
+// `--libs all` lists optional components that may not be installed as static
+// archives (e.g. apt ships no libPolly.a) -- drop the ones that aren't present.
+const llvmLibs = tokens(LC, ["--link-static", "--libs", "all"]).filter((t) => {
+  const m = /^-l(.+)$/.exec(t);
+  return !m || existsSync(join(libdir, `lib${m[1]}.a`));
+});
+
+// Embed LLVM's extra deps by linking their static archive when available (keeps
+// the binary self-contained); fall back to dynamic for genuine OS libs
+// (-lm/-ldl/-lpthread, macOS SDK -lz, Windows -lshell32, ...).
+const sysLibs = tokens(LC, ["--link-static", "--system-libs"]).flatMap((t) => {
+  const m = /^-l(.+)$/.exec(t);
+  if (!m) return [t];
+  const name = m[1] === "zstd.dll" ? "zstd" : m[1];
+  for (const d of extraDirs) {
+    const a = join(d, `lib${name}.a`);
+    if (existsSync(a)) return [a];
+  }
+  return [`-l${name}`];
+});
+const extraLdflags = OS === "darwin" ? extraDirs.map((d) => `-L${d}`) : [];
 
 // Clang has no llvm-config; link its static component archives directly. Skip
 // the shared/import libs and the aggregates (libclang-cpp / the C-API libclang),
@@ -106,7 +137,7 @@ function link(outName, entryObj) {
   execFileSync(CXX, [
     "-o", out,
     ...coreObjs, entryObj,
-    ...staticRuntime, ...stripAndGc, ...ldflags,
+    ...staticRuntime, ...stripAndGc, ...ldflags, ...extraLdflags,
     ...groupStart, ...clangArchives, ...llvmLibs, ...groupEnd,
     ...sysLibs,
   ], { stdio: "inherit" });
