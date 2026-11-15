@@ -31,7 +31,8 @@ jobs:
     name: Build engine (${{ matrix.vendor }})
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: true
+      # Collect every platform's errors in one run (release builds are rare).
+      fail-fast: false
       matrix:
         include:
           - { os: ubuntu-latest,    vendor: linux-x64,    ext: "" }
@@ -98,6 +99,7 @@ jobs:
           install: >-
             mingw-w64-ucrt-x86_64-llvm
             mingw-w64-ucrt-x86_64-clang
+            mingw-w64-ucrt-x86_64-clang-tools-extra
             mingw-w64-ucrt-x86_64-cmake
             mingw-w64-ucrt-x86_64-ninja
 
