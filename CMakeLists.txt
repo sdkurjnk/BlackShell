@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
-project(blackshell_engine CXX)
+# C enabled alongside CXX: macOS Homebrew LLVM's LLVMConfig runs FindLibEdit,
+# which check_include_file(histedit.h) compiles a .c probe — fails if C is off.
+project(blackshell_engine C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
