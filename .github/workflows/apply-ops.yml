@@ -3,8 +3,11 @@ name: Apply Ops
 # ops/* lane: pipeline/infra changes that do NOT change the version.
 # No PR, no tag, no Release -- apply the given ops/* branch straight onto the
 # latest master AND develop (bootstrap-style), after consistency checks.
-# ops/* is cut from develop: develop gets a merge, master gets a cherry-pick of
-# ONLY the ops commits (never unreleased develop history).
+# ops/* is cut from master and merged (--no-ff) into BOTH master and develop. Basing
+# on master means the merge carries ONLY the ops commits (never develop's unreleased
+# history), and both branches reference the SAME commit SHAs -- so a later
+# release -> master merge can't conflict on ops-touched files (cherry-pick would
+# diverge and cause exactly that).
 #
 # Both merges are pushed with `git push --atomic`, so either both branches move
 # or neither does (never half-applied).
@@ -70,20 +73,20 @@ jobs:
             echo "::error::release/hotfix open: $open -- finish it first."; exit 1
           fi
 
-      # ops/* is cut from develop. Only its OWN commits (base..branch) may go to
-      # master -- never the unreleased develop history underneath it.
+      # ops/* is cut from master. base..branch is its OWN commits; used below only to
+      # check that nothing outside .github/ changed.
       - name: Resolve ops commits
         id: range
         env:
           BRANCH: ${{ inputs.branch }}
         run: |
           set -euo pipefail
-          base="$(git merge-base origin/develop "origin/$BRANCH")"
+          base="$(git merge-base origin/master "origin/$BRANCH")"
           if [[ -n "$(git rev-list --merges "$base..origin/$BRANCH")" ]]; then
-            echo "::error::'$BRANCH' contains merge commits -- keep it linear (rebase onto develop)."; exit 1
+            echo "::error::'$BRANCH' contains merge commits -- keep it linear (rebase onto master)."; exit 1
           fi
           if [[ -z "$(git rev-list "$base..origin/$BRANCH")" ]]; then
-            echo "::error::'$BRANCH' has no commits beyond develop."; exit 1
+            echo "::error::'$BRANCH' has no commits beyond master."; exit 1
           fi
           git log --oneline "$base..origin/$BRANCH"
           echo "base=$base" >> "$GITHUB_OUTPUT"
@@ -109,29 +112,24 @@ jobs:
           git checkout -q "origin/${{ inputs.branch }}"
           ./actionlint -color
 
-      # ---------------- merge locally into both, then push atomically ----------------
-      - name: Apply to develop (merge) and master (cherry-pick ops commits only)
+      # ------------- merge the SAME ops commits into both, then push atomically -------------
+      # ops is based on master, so merging it carries ONLY its commits into each branch,
+      # and both reference the same SHAs (no cherry-pick divergence).
+      - name: Apply to master and develop (merge)
         env:
           BRANCH: ${{ inputs.branch }}
-          BASE: ${{ steps.range.outputs.base }}
         run: |
           set -euo pipefail
           git config user.name  "blackshell-ops[bot]"
           git config user.email "ops-bot@users.noreply.github.com"
 
-          # develop: ops branched from here -> normal merge.
-          git checkout -q -B apply-develop origin/develop
-          if ! git merge --no-ff -m "ops: apply $BRANCH into develop" "origin/$BRANCH"; then
-            echo "::error::conflict merging $BRANCH into develop -- rebase onto latest develop."
-            git merge --abort || true; exit 1
-          fi
-
-          # master: replay ONLY the ops commits, so unreleased develop work stays out.
-          git checkout -q -B apply-master origin/master
-          if ! git cherry-pick -x "$BASE..origin/$BRANCH"; then
-            echo "::error::ops commits don't apply cleanly on master (they depend on unreleased develop changes?)."
-            git cherry-pick --abort || true; exit 1
-          fi
+          for target in master develop; do
+            git checkout -q -B "apply-$target" "origin/$target"
+            if ! git merge --no-ff -m "ops: apply $BRANCH" "origin/$BRANCH"; then
+              echo "::error::conflict merging $BRANCH into $target -- rebase ops onto latest master."
+              git merge --abort || true; exit 1
+            fi
+          done
 
       - name: Push both (atomic)
         env:

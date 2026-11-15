@@ -58,6 +58,8 @@ for (const vendor of vendors) {
     cpu: [arch],
     files: [exe],
     license: "MIT",
+    // Must match the build repo or npm rejects the provenance bundle (E422).
+    repository: { type: "git", url: "git+https://github.com/sdkurjnk/BlackShell.git" },
     // provenance needs CI OIDC; omit it for a local --dry-run so the run completes.
     publishConfig: { access: "public", ...(dryRun ? {} : { provenance: true }) },
   }, null, 2) + "\n");
