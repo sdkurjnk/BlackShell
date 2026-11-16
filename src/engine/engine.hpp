@@ -1,6 +1,7 @@
 #pragma once
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace llvm { class Module; class LLVMContext; }
 
@@ -20,10 +21,11 @@ enum ExitCode { EXIT_OK = 0, EXIT_ERR = 1, EXIT_REJECT = 2 };
 // the LLVMContext and must outlive the returned Module.
 std::unique_ptr<llvm::Module> frontend_compile(const std::string& src, llvm::LLVMContext& ctx);
 bool gate_check(const llvm::Module& m);                 // §5 cond.1; dummy accept-all
-bool noising_apply(llvm::Module& m);                    // L1-L3 in place; dummy identity
+// levels = the orthogonal dials to apply (e.g. {"L1","L3"}); empty = L0 identity.
+bool noising_apply(llvm::Module& m, const std::vector<std::string>& levels);  // L1-L3 in place; dummy identity
 bool harness_verify(const llvm::Module& baseline, const llvm::Module& transformed);  // L0 vs transformed; dummy = equivalent
 bool backend_emit(llvm::Module& m, const std::string& obj_out);  // LLVM: Module -> object
 
 // --- driver (sequences the primitives) ---
 int driver_check(const std::string& src);   // gate verdict only
-int driver_enshell(const std::string& src); // full enshell pipeline
+int driver_enshell(const std::string& src, const std::vector<std::string>& levels); // full enshell pipeline

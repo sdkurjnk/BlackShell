@@ -26,7 +26,7 @@ int driver_check(const std::string& src) {
 
 // Enshell pipeline: frontend -> gate -> noising -> backend -> artifact. Emits
 // structured tokens on stdout; the Launcher renders them.
-int driver_enshell(const std::string& src) {
+int driver_enshell(const std::string& src, const std::vector<std::string>& levels) {
     const std::string obj = stem(src) + ".o";
     llvm::LLVMContext ctx;
     std::unique_ptr<llvm::Module> m = frontend_compile(src, ctx);
@@ -35,7 +35,7 @@ int driver_enshell(const std::string& src) {
     // L0 baseline: snapshot before noising so the harness compares against the
     // pre-noise Module (identity noising makes them equal for now).
     std::unique_ptr<llvm::Module> baseline = llvm::CloneModule(*m);
-    if (!noising_apply(*m)) { std::printf("noising.failed %s\n", src.c_str()); return EXIT_ERR; }
+    if (!noising_apply(*m, levels)) { std::printf("noising.failed %s\n", src.c_str()); return EXIT_ERR; }
     if (!harness_verify(*baseline, *m)) { std::printf("verify.broken %s\n", src.c_str()); return EXIT_ERR; }
     if (!backend_emit(*m, obj)) { std::printf("backend.failed %s\n", src.c_str()); return EXIT_ERR; }
     std::printf("sealed %s %s\n", src.c_str(), obj.c_str());
