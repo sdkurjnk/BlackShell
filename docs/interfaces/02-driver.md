@@ -8,7 +8,7 @@ git 2단계 — `add`로 스테이징 → `enshell`로 전체 봉인(`git commit
 
 | 명령 | 역할 | git |
 | --- | --- | --- |
-| `add <source> [--level L]` | 유닛 스테이징 (레벨 기록, 생략 시 `L3`) | `git add` |
+| `add <source> [--level N]` | 유닛 스테이징 (N=1..3→누적 집합 `{L1..LN}` 기록, 생략 시 3) | `git add` |
 | `drop <source>` | 언스테이징 | `git restore --staged` |
 | `list` | 스테이징 목록 | `git status` |
 | `enshell` | 스테이징 전체 봉인 → 오브젝트, 완료 후 비움(1-shot) | `git commit` |
@@ -16,8 +16,10 @@ git 2단계 — `add`로 스테이징 → `enshell`로 전체 봉인(`git commit
 
 스테이징 = `.blackshell/stage.json`, `Unit = { path, levels[] }`. 유닛은 소스 파일(`.c`), 프론트엔드(clang)가 IR로 낮춘다.
 
-> ⚠️ **현재 갭:** 레벨은 저장만 되고 엔진 호출(`enshell <path>`)에 전달 안 됨. 더미 노이징이라 무해(기본
-> `L3`도 실제론 L0과 동일). 실제 노이징 넣을 때 배선 필요. `shortcut: 레벨 미전달, 실제 노이징 교체 시 배선.`
+> **레벨 UX vs 계약:** 사용자 앞문은 단일 다이얼 `--level N`(누적 사다리)이지만, 저장·전달은 직교 집합
+> `{L1..LN}`이다. Launcher가 `enshell <path> --level L1,L2`로 집합을 엔진에 전달하고, 엔진 계약은 집합을
+> 그대로 유지한다(§9 하네스가 패스별로 켜고 끄며 이분탐색하려면 집합이어야 함). 더미 노이징은 레벨을
+> 무시(identity)하므로 지금은 기본 3도 L0과 동일. 실제 L1/L2/L3 패스가 집합을 읽어 적용.
 
 ## 파이프라인 순서 (엔진 `enshell` = `driver_enshell`, 고정)
 
