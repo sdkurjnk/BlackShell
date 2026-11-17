@@ -7,7 +7,7 @@ BlackShell은 GitFlow 기반의 자동화 릴리스 파이프라인을 쓴다. �
 > 구현은 Node.js, 배포는 npm(`@sdkurjnk/blackshell`, CLI 명령어 `blackshell`)이다. finalize가
 > 태그를 찍으면 **병합 전에** 그 태그에서 5개 플랫폼 빌드·테스트 후 npm publish가 돌고, 이게
 > **성공해야** `master`·`develop` 병합이 진행된다(배포 선행 게이트). 깨진 플랫폼 빌드나 publish
-> 실패는 병합 자체를 막는다. (내부 IR 엔진 언어는 추후 결정 — CLI 경계 뒤에 숨긴다. 기획안 §9.)
+> 실패는 병합 자체를 막는다. (내부 IR 엔진 언어는 추후 결정 — CLI 경계 뒤에 숨긴다. 기획안 참조.)
 
 ---
 
@@ -50,7 +50,7 @@ BlackShell은 GitFlow 기반의 자동화 릴리스 파이프라인을 쓴다. �
 | `docs/<이름>` | 문서만 변경 | 불필요 | release 안 만듦. 다음 release에 함께 실림 |
 | `chore/<이름>` | 빌드·CI·잡무 등 비기능 변경 | 불필요 | release 안 만듦 |
 
-- 기준 브랜치(base)는 **항상 `develop`** 이다. `master`로 직접 PR을 올리지 않는다(핫픽스만 예외 — §5).
+- 기준 브랜치(base)는 **항상 `develop`** 이다. `master`로 직접 PR을 올리지 않는다(핫픽스만 예외 — 5절).
 
 - "릴리스에 버전을 매길 만한 변경인가?"가 `feature/*` 인지 아닌지의 기준이다. 애매하면 `feature/*`.
 
@@ -84,9 +84,9 @@ PR 본문의 체크박스(`- [ ]`)는 **작성자가 완료한 항목을 전부 
 
 - **Verify PR Checklist** — 미체크 체크박스가 없는지.
 
-- **Verify Version Label** — 버전 라벨이 정확히 하나인지(§2-1).
+- **Verify Version Label** — 버전 라벨이 정확히 하나인지(2-1절).
 
-- **Serialize Guard** — 지금 진행 중인 release/hotfix가 없는지(§4).
+- **Serialize Guard** — 지금 진행 중인 release/hotfix가 없는지(4절).
 
 - **test (20) / test (22)** — Node 20·22에서 CLI 테스트 통과(`npm ci` → `npm test`).
 
@@ -127,16 +127,16 @@ develop을 다시 받아 재실행하면 통과한다.
 
 ## 5. 핫픽스에 기여하기 (출시된 버전의 긴급 수정)
 
-이미 배포된 버전에 심각한 버그가 있을 때만 해당한다. 일반 기여는 §1~2로 충분하다.
+이미 배포된 버전에 심각한 버그가 있을 때만 해당한다. 일반 기여는 1~2절로 충분하다.
 
 1. Actions 탭에서 **Make Hotfix Branch** 워크플로를 실행한다. master tip에서
    `hotfix/vX.Y.(Z+1)`을 자동으로 만든다(Z = master 도달 태그의 패치). develop이 아닌
    master에서 분기하는 이유는 미출시 기능이 딸려가지 않게 하기 위함이다.
-   - 열려 있는 release/hotfix가 있으면 실패한다(1:1 직렬화, §4). 먼저 마무리한 뒤 다시 실행한다.
+   - 열려 있는 release/hotfix가 있으면 실패한다(1:1 직렬화, 4절). 먼저 마무리한 뒤 다시 실행한다.
 
 2. 만들어진 브랜치를 checkout해 수정하고 push한다. 핫픽스는 정의상 항상 PATCH라 버전 라벨이 필요 없다.
 
-3. 이후 finalize·배포는 릴리스 담당이 진행한다(§3와 동일한 자동 흐름).
+3. 이후 finalize·배포는 릴리스 담당이 진행한다(3절과 동일한 자동 흐름).
 
 ---
 
@@ -146,6 +146,6 @@ develop을 다시 받아 재실행하면 통과한다.
 |------|------------|
 | `Verify Version Label` 실패 | `feature/*` PR에 `major`/`minor`/`patch`를 정확히 하나 붙인다. |
 | `Verify PR Checklist` 실패 | PR 본문의 `- [ ]`를 모두 체크한다. |
-| `Serialize Guard` 실패 | 진행 중인 release/hotfix가 끝날 때까지 대기(§4). |
-| "Update branch" 요구 | develop을 머지해 최신으로 맞춘다(§4). |
+| `Serialize Guard` 실패 | 진행 중인 release/hotfix가 끝날 때까지 대기(4절). |
+| "Update branch" 요구 | develop을 머지해 최신으로 맞춘다(4절). |
 | 라벨을 붙였는데 여전히 실패 | 라벨을 바꾸면 체크가 재평가된다. 라벨이 정확히 하나인지 다시 확인. |
