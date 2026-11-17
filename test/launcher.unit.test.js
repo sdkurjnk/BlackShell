@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { render, showLevels, popOption, onePositional, readStage, writeStage } from "../dist/cli.js";
+import { render, showLevels, expandLevel, popOption, onePositional, readStage, writeStage, enshellArgs } from "../dist/cli.js";
 
 // Pure launcher units — no engine, no spawn.
 
@@ -34,6 +34,21 @@ test("onePositional returns the lone positional (ignoring flags), else undefined
   assert.equal(onePositional(["a.c", "--level"]), "a.c"); // flags filtered out
   assert.equal(onePositional([]), undefined);
   assert.equal(onePositional(["a.c", "b.c"]), undefined);
+});
+
+test("expandLevel: N -> cumulative {L1..LN}, default full, invalid -> null", () => {
+  assert.deepEqual(expandLevel("2"), ["L1", "L2"]);
+  assert.deepEqual(expandLevel("1"), ["L1"]);
+  assert.deepEqual(expandLevel(undefined), ["L1", "L2", "L3"]); // default = full strength
+  assert.equal(expandLevel("0"), null);
+  assert.equal(expandLevel("4"), null);
+  assert.equal(expandLevel("L2"), null); // letter form no longer accepted
+  assert.equal(expandLevel("1.5"), null);
+});
+
+test("enshellArgs forwards staged levels to the engine, omits --level for L0", () => {
+  assert.deepEqual(enshellArgs({ path: "a.c", levels: ["L1", "L2"] }), ["enshell", "a.c", "--level", "L1,L2"]);
+  assert.deepEqual(enshellArgs({ path: "a.c", levels: [] }), ["enshell", "a.c"]);
 });
 
 test("writeStage/readStage round-trip through the index file", () => {
