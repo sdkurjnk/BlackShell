@@ -11,10 +11,12 @@ read-only 판정. §5 조건1(외부 메모리 비공유) 위반이면 `false` �
 
 > ⚠️ accept-all은 "봉인됨"이라는 거짓 확신을 준다. **출하 전 반드시 실제 게이트로 교체.**
 
-## 노이징 `noising_apply(ir) -> bool` (우리 IP)
+## 노이징 `noising_apply(ir, levels) -> bool` (우리 IP)
 
-IR을 in place 변환. 의미 보존이 절대 불변식(하네스가 뒤에서 검증). 레벨 L1/L2(OLLVM) · L3(carry-sensitive
-MBA) — 아직 배선 안 됨(문서 02). 더미(`noising.cpp`) = **항등**(no-op) = "정확하지만 보호 안 됨".
+IR을 in place 변환. 의미 보존이 절대 불변식(하네스가 뒤에서 검증). `levels`는 적용할 **직교 집합**
+(예 `{L1,L2}`, 빈 집합=L0 항등) — L1/L2(OLLVM) · L3(carry-sensitive MBA). 사다리 아님·단일 다이얼 아님:
+집합이라야 하네스가 패스별로 켜고 끈다. Launcher→엔진까지 배선 완료(문서 02). 더미(`noising.cpp`) =
+**항등**(levels 무시) = "정확하지만 보호 안 됨".
 
 ## 등가검증 `harness_verify(baseline, transformed) -> bool` (우리 IP)
 

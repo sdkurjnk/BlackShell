@@ -13,7 +13,7 @@
 
 ```mermaid
 flowchart TD
-    USER(["사용자 CLI<br/>$ blackshell add add2.c --level L1,L2"]):::user
+    USER(["사용자 CLI<br/>$ blackshell add add2.c --level 2"]):::user
 
     subgraph LAUNCHER["Launcher — TS / npm 패키지 (src/launcher/cli.ts)"]
         PARSE["CLI 파싱 · 명령셋<br/>check/add/drop/list/enshell"]:::js
@@ -129,7 +129,7 @@ flowchart TD
 | 명령 | 역할 | 구현 |
 | --- | --- | --- |
 | `check <source>` | 게이트 판정만(미리보기) | `cmdCheck` → 엔진 `check` |
-| `add <source> [--level L]` | 유닛 스테이징 (레벨 기록) | `cmdAdd` |
+| `add <source> [--level N]` | 유닛 스테이징 (N=1..3→누적 {L1..LN} 기록, 생략 시 3) | `cmdAdd` |
 | `drop <source>` | 언스테이징 | `cmdDrop` |
 | `list` | 스테이징 목록 | `cmdList` |
 | `enshell` | 스테이징 전체 봉인 → 오브젝트 | `cmdEnshell` → 유닛마다 엔진 `enshell` |
@@ -140,8 +140,8 @@ flowchart TD
 
 exit 코드: `0` 정상 · `1` 오류 · `2` 게이트 거부 · `127` 엔진 없음(Launcher가 설정).
 
-> ⚠️ **현재 갭:** `add`의 레벨(기본 `L3`)은 스테이징에 저장되지만 엔진 호출(`enshell <path>`)에 아직
-> 전달 안 함. 노이징이 레벨 무관 더미라 무해 — 실제 노이징 넣을 때 레벨 배선 필요. (`interfaces/02-driver.md`)
+> 레벨은 스테이징의 집합(`{L1..LN}`)으로 엔진 `enshell --level L1,L2`에 전달된다. 엔진 계약은 직교 집합을
+> 유지하고(하네스 패스별 토글용), 더미 노이징은 레벨을 무시(identity). (`interfaces/02-driver.md`)
 
 ---
 

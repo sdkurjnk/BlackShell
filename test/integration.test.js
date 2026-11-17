@@ -55,19 +55,27 @@ test("add then enshell seals a staged unit to an object file", () => {
   });
 });
 
-test("add without --level defaults to L3", () => {
+test("add without --level defaults to full strength L1,L2,L3", () => {
   withWork((work) => {
     run(["add", fixture], { cwd: work });
-    assert.match(run(["list"], { cwd: work }).stdout, /add2\.c \[L3\]/);
+    assert.match(run(["list"], { cwd: work }).stdout, /add2\.c \[L1,L2,L3\]/);
   });
 });
 
-test("add / list / drop manage the staging index", () => {
+test("add --level N expands to the cumulative set L1..LN", () => {
   withWork((work) => {
-    run(["add", fixture, "--level", "L1,L2"], { cwd: work });
+    run(["add", fixture, "--level", "2"], { cwd: work });
     assert.match(run(["list"], { cwd: work }).stdout, /add2\.c \[L1,L2\]/);
     assert.equal(run(["drop", fixture], { cwd: work }).status, 0);
     assert.match(run(["list"], { cwd: work }).stdout, /nothing staged/);
+  });
+});
+
+test("add rejects an out-of-range --level", () => {
+  withWork((work) => {
+    const r = run(["add", fixture, "--level", "9"], { cwd: work });
+    assert.equal(r.status, 1);
+    assert.match(r.stderr, /--level must be an integer 1\.\.3/);
   });
 });
 

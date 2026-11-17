@@ -49,7 +49,7 @@ Units are **source files**. git-style staging — stage units, then seal the set
 
 ```sh
 blackshell check <source>                # preview: is this region eligible? (gate only)
-blackshell add   <source> --level L1,L3   # stage a unit (default level: L3)
+blackshell add   <source> --level 2      # stage a unit (N=1..3, cumulative L1..LN; default 3)
 blackshell list                          # show staged units and levels
 blackshell drop  <source>                # unstage
 blackshell enshell                       # seal all staged units -> object files
@@ -58,7 +58,7 @@ blackshell enshell                       # seal all staged units -> object files
 Example:
 
 ```sh
-blackshell add src/engine/examples/add2.c --level L1,L3
+blackshell add src/engine/examples/add2.c --level 2
 blackshell enshell
 ```
 
