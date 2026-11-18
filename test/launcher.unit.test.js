@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { render, showLevels, expandLevel, popOption, onePositional, readStage, writeStage, enshellArgs } from "../dist/cli.js";
+import { render, showLevels, expandLevel, popOption, onePositional, readStage, writeStage, enshellArgs, isTargetSource } from "../dist/cli.js";
 
 // Pure launcher units — no engine, no spawn.
 
@@ -44,6 +44,15 @@ test("expandLevel: N -> cumulative {L1..LN}, default full, invalid -> null", () 
   assert.equal(expandLevel("4"), null);
   assert.equal(expandLevel("L2"), null); // letter form no longer accepted
   assert.equal(expandLevel("1.5"), null);
+});
+
+test("isTargetSource accepts C/C++ extensions (case-insensitive), rejects others", () => {
+  assert.equal(isTargetSource("a.c"), true);
+  assert.equal(isTargetSource("a.cpp"), true);
+  assert.equal(isTargetSource("dir/a.CXX"), true); // case-insensitive
+  assert.equal(isTargetSource("a.h"), false); // header is not a compile unit
+  assert.equal(isTargetSource("a.rs"), false);
+  assert.equal(isTargetSource("Makefile"), false); // no extension
 });
 
 test("enshellArgs forwards staged levels to the engine, omits --level for L0", () => {

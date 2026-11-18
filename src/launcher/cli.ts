@@ -7,7 +7,7 @@ import { spawnSync } from "node:child_process";
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
-import { dirname, join } from "node:path";
+import { dirname, join, extname } from "node:path";
 
 const here = (p: string): string => fileURLToPath(new URL(p, import.meta.url));
 const pkg = JSON.parse(readFileSync(here("../package.json"), "utf8")) as { version: string };
@@ -40,6 +40,14 @@ export function readStage(): Unit[] {
 export function writeStage(units: Unit[]): void {
   mkdirSync(".blackshell", { recursive: true });
   writeFileSync(STAGE_FILE, JSON.stringify(units, null, 2) + "\n");
+}
+
+// Source extensions the Clang frontend accepts. MVP = C/C++; a new frontend
+// module later just adds its extensions here. Lowercase, with the dot.
+const TARGET_EXTENSIONS = [".c", ".cpp", ".cc", ".cxx"];
+
+export function isTargetSource(path: string): boolean {
+  return TARGET_EXTENSIONS.includes(extname(path).toLowerCase());
 }
 
 const MAX_LEVEL = 3; // L1..L3 are the noising dials defined in the plan §6.
@@ -169,6 +177,10 @@ function cmdCheck(rest: string[]): number {
     console.error("error: expected exactly one <source> argument");
     return 1;
   }
+  if (!isTargetSource(src)) {
+    console.error(`error: unsupported source type: ${src} (target: ${TARGET_EXTENSIONS.join(" ")})`);
+    return 1;
+  }
   const { token, status } = engine(["check", src]);
   emit(token);
   return status;
@@ -183,6 +195,10 @@ function cmdAdd(rest: string[]): number {
   }
   if (!existsSync(src)) {
     console.error(`error: file not found: ${src}`);
+    return 1;
+  }
+  if (!isTargetSource(src)) {
+    console.error(`error: unsupported source type: ${src} (target: ${TARGET_EXTENSIONS.join(" ")})`);
     return 1;
   }
   const levels = expandLevel(opt.value);
