@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { render, showLevels, expandLevel, popOption, onePositional, readStage, writeStage, enshellArgs, isTargetSource } from "../dist/cli.js";
+import { render, showLevels, expandLevel, popOption, onePositional, strayOption, readStage, writeStage, enshellArgs, isTargetSource } from "../dist/cli.js";
 
 // Pure launcher units — no engine, no spawn.
 
@@ -34,6 +34,12 @@ test("onePositional returns the lone positional (ignoring flags), else undefined
   assert.equal(onePositional(["a.c", "--level"]), "a.c"); // flags filtered out
   assert.equal(onePositional([]), undefined);
   assert.equal(onePositional(["a.c", "b.c"]), undefined);
+});
+
+test("strayOption returns the first leftover --flag, else undefined", () => {
+  assert.equal(strayOption(["a.c", "--bogus"]), "--bogus");
+  assert.equal(strayOption(["a.c"]), undefined);
+  assert.equal(strayOption([]), undefined);
 });
 
 test("expandLevel: N -> cumulative {L1..LN}, default full, invalid -> null", () => {

@@ -79,6 +79,15 @@ test("add --name with no value exits 1", () => {
   });
 });
 
+test("an unknown option is rejected instead of silently ignored", () => {
+  withWork((work) => {
+    const r = run(["add", fixture, "--bogus"], { cwd: work });
+    assert.equal(r.status, 1);
+    assert.match(r.stderr, /unknown option: --bogus/);
+    assert.match(run(["check", fixture, "--nope"]).stderr, /unknown option: --nope/);
+  });
+});
+
 test("add without --level defaults to full strength L1,L2,L3", () => {
   withWork((work) => {
     run(["add", fixture], { cwd: work });

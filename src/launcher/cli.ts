@@ -164,6 +164,13 @@ export function onePositional(rest: string[]): string | undefined {
   return positionals[0];
 }
 
+// First leftover "--flag" once the command's known options are popped off.
+// A command calls this on its remaining args to reject typos/unsupported flags
+// instead of silently dropping them (onePositional filters "--" tokens out).
+export function strayOption(rest: string[]): string | undefined {
+  return rest.find((a) => a.startsWith("--"));
+}
+
 // engine argv for sealing one unit; forwards the staged levels (empty = L0) and,
 // if named, the output path (engine owns file I/O; we pass an opaque path).
 export function enshellArgs(u: Unit): string[] {
@@ -179,6 +186,11 @@ export function enshellArgs(u: Unit): string[] {
 
 // --- commands ---
 function cmdCheck(rest: string[]): number {
+  const stray = strayOption(rest);
+  if (stray !== undefined) {
+    console.error(`error: unknown option: ${stray}`);
+    return 1;
+  }
   const src = onePositional(rest);
   if (src === undefined) {
     console.error("error: expected exactly one <source> argument");
@@ -200,6 +212,11 @@ function cmdCheck(rest: string[]): number {
 function cmdAdd(rest: string[]): number {
   const levelOpt = popOption(rest, "--level");
   const nameOpt = popOption(levelOpt.rest, "--name");
+  const stray = strayOption(nameOpt.rest);
+  if (stray !== undefined) {
+    console.error(`error: unknown option: ${stray}`);
+    return 1;
+  }
   const src = onePositional(nameOpt.rest);
   if (src === undefined) {
     console.error("error: expected exactly one <source> argument");
@@ -236,6 +253,11 @@ function cmdAdd(rest: string[]): number {
 }
 
 function cmdDrop(rest: string[]): number {
+  const stray = strayOption(rest);
+  if (stray !== undefined) {
+    console.error(`error: unknown option: ${stray}`);
+    return 1;
+  }
   const src = onePositional(rest);
   if (src === undefined) {
     console.error("error: expected exactly one <source> argument");
