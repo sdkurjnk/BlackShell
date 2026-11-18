@@ -184,6 +184,10 @@ function cmdCheck(rest: string[]): number {
     console.error("error: expected exactly one <source> argument");
     return 1;
   }
+  if (!existsSync(src)) {
+    console.error(`error: file not found: ${src}`);
+    return 1;
+  }
   if (!isTargetSource(src)) {
     console.error(`error: unsupported source type: ${src} (target: ${TARGET_EXTENSIONS.join(" ")})`);
     return 1;

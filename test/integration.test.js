@@ -34,6 +34,12 @@ test("check with no source argument exits 1", () => {
   assert.match(r.stderr, /exactly one <source>/);
 });
 
+test("check rejects a file that does not exist", () => {
+  const r = run(["check", "nope.c"]);
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /file not found/);
+});
+
 test("-v prints the package version", () => {
   const r = run(["-v"]);
   assert.equal(r.status, 0);
