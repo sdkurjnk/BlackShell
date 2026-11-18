@@ -7,7 +7,7 @@ import { spawnSync } from "node:child_process";
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
-import { dirname, join } from "node:path";
+import { dirname, join, extname } from "node:path";
 
 const here = (p: string): string => fileURLToPath(new URL(p, import.meta.url));
 const pkg = JSON.parse(readFileSync(here("../package.json"), "utf8")) as { version: string };
@@ -15,7 +15,9 @@ const pkg = JSON.parse(readFileSync(here("../package.json"), "utf8")) as { versi
 const USAGE = `blackshell <command> [options]
 
   check <source>              Gate verdict only (dummy: accept-all)
-  add   <source> [--level N]  Stage a unit for sealing (N = strength 1..3, cumulative L1..LN; default 3)
+  add   <source> [--level N] [--name NAME]
+                              Stage a unit for sealing (N = strength 1..3, cumulative
+                              L1..LN; default 3). --name sets the output to NAME.o.
   drop  <source>              Unstage a unit
   list                        Show staged units and their levels
   enshell                     Seal every staged unit -> object files
@@ -28,6 +30,7 @@ const STAGE_FILE = ".blackshell/stage.json";
 interface Unit {
   path: string;
   levels: string[];
+  name?: string; // output object stem; absent -> engine defaults to <source stem>
 }
 
 export function readStage(): Unit[] {
@@ -40,6 +43,14 @@ export function readStage(): Unit[] {
 export function writeStage(units: Unit[]): void {
   mkdirSync(".blackshell", { recursive: true });
   writeFileSync(STAGE_FILE, JSON.stringify(units, null, 2) + "\n");
+}
+
+// Source extensions the Clang frontend accepts. MVP = C/C++; a new frontend
+// module later just adds its extensions here. Lowercase, with the dot.
+const TARGET_EXTENSIONS = [".c", ".cpp", ".cc", ".cxx"];
+
+export function isTargetSource(path: string): boolean {
+  return TARGET_EXTENSIONS.includes(extname(path).toLowerCase());
 }
 
 const MAX_LEVEL = 3; // L1..L3 are the noising dials defined in the plan §6.
@@ -153,30 +164,34 @@ export function onePositional(rest: string[]): string | undefined {
   return positionals[0];
 }
 
-// engine argv for sealing one unit; forwards the staged levels (empty = L0).
+// First leftover "--flag" once the command's known options are popped off.
+// A command calls this on its remaining args to reject typos/unsupported flags
+// instead of silently dropping them (onePositional filters "--" tokens out).
+export function strayOption(rest: string[]): string | undefined {
+  return rest.find((a) => a.startsWith("--"));
+}
+
+// engine argv for sealing one unit; forwards the staged levels (empty = L0) and,
+// if named, the output path (engine owns file I/O; we pass an opaque path).
 export function enshellArgs(u: Unit): string[] {
   const args = ["enshell", u.path];
   if (u.levels.length > 0) {
     args.push("--level", u.levels.join(","));
+  }
+  if (u.name !== undefined) {
+    args.push("--out", `${u.name}.o`);
   }
   return args;
 }
 
 // --- commands ---
 function cmdCheck(rest: string[]): number {
-  const src = onePositional(rest);
-  if (src === undefined) {
-    console.error("error: expected exactly one <source> argument");
+  const stray = strayOption(rest);
+  if (stray !== undefined) {
+    console.error(`error: unknown option: ${stray}`);
     return 1;
   }
-  const { token, status } = engine(["check", src]);
-  emit(token);
-  return status;
-}
-
-function cmdAdd(rest: string[]): number {
-  const opt = popOption(rest, "--level");
-  const src = onePositional(opt.rest);
+  const src = onePositional(rest);
   if (src === undefined) {
     console.error("error: expected exactly one <source> argument");
     return 1;
@@ -185,19 +200,75 @@ function cmdAdd(rest: string[]): number {
     console.error(`error: file not found: ${src}`);
     return 1;
   }
-  const levels = expandLevel(opt.value);
+  if (!isTargetSource(src)) {
+    console.error(`error: unsupported source type: ${src} (target: ${TARGET_EXTENSIONS.join(" ")})`);
+    return 1;
+  }
+  const { token, status } = engine(["check", src]);
+  emit(token);
+  return status;
+}
+
+function cmdAdd(rest: string[]): number {
+  const levelOpt = popOption(rest, "--level");
+  const nameOpt = popOption(levelOpt.rest, "--name");
+  const stray = strayOption(nameOpt.rest);
+  if (stray !== undefined) {
+    console.error(`error: unknown option: ${stray}`);
+    return 1;
+  }
+  const src = onePositional(nameOpt.rest);
+  if (src === undefined) {
+    console.error("error: expected exactly one <source> argument");
+    return 1;
+  }
+  if (!existsSync(src)) {
+    console.error(`error: file not found: ${src}`);
+    return 1;
+  }
+  if (!isTargetSource(src)) {
+    console.error(`error: unsupported source type: ${src} (target: ${TARGET_EXTENSIONS.join(" ")})`);
+    return 1;
+  }
+  const levels = expandLevel(levelOpt.value);
   if (levels === null) {
     console.error(`error: --level must be an integer 1..${MAX_LEVEL}`);
     return 1;
   }
+  // --name was given but swallowed the next flag / had no value.
+  if (rest.includes("--name") && (nameOpt.value === undefined || nameOpt.value === "" || nameOpt.value.startsWith("--"))) {
+    console.error("error: --name requires a value");
+    return 1;
+  }
+  // --name is a bare object stem, not a path: reject separators so the output
+  // can't escape the working dir (we hand it to the engine as the object path).
+  if (nameOpt.value !== undefined && /[/\\]/.test(nameOpt.value)) {
+    console.error("error: --name must be a bare filename (no path separators)");
+    return 1;
+  }
+  const unit: Unit = { path: src, levels };
+  if (nameOpt.value !== undefined) {
+    unit.name = nameOpt.value;
+  }
   const units = readStage().filter((u) => u.path !== src);
-  units.push({ path: src, levels });
+  // Two units sharing an output name would clobber each other at enshell time.
+  if (unit.name !== undefined && units.some((u) => u.name === unit.name)) {
+    console.error(`error: output name already staged: ${unit.name}.o`);
+    return 1;
+  }
+  units.push(unit);
   writeStage(units);
-  console.log(`staged: ${src} [${showLevels(levels)}]`);
+  const out = unit.name === undefined ? "" : ` -> ${unit.name}.o`;
+  console.log(`staged: ${src} [${showLevels(levels)}]${out}`);
   return 0;
 }
 
 function cmdDrop(rest: string[]): number {
+  const stray = strayOption(rest);
+  if (stray !== undefined) {
+    console.error(`error: unknown option: ${stray}`);
+    return 1;
+  }
   const src = onePositional(rest);
   if (src === undefined) {
     console.error("error: expected exactly one <source> argument");
@@ -221,7 +292,8 @@ function cmdList(): number {
     return 0;
   }
   for (const u of units) {
-    console.log(`  ${u.path} [${showLevels(u.levels)}]`);
+    const out = u.name === undefined ? "" : ` -> ${u.name}.o`;
+    console.log(`  ${u.path} [${showLevels(u.levels)}]${out}`);
   }
   return 0;
 }

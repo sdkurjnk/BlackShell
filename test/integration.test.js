@@ -34,6 +34,12 @@ test("check with no source argument exits 1", () => {
   assert.match(r.stderr, /exactly one <source>/);
 });
 
+test("check rejects a file that does not exist", () => {
+  const r = run(["check", "nope.c"]);
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /file not found/);
+});
+
 test("-v prints the package version", () => {
   const r = run(["-v"]);
   assert.equal(r.status, 0);
@@ -52,6 +58,52 @@ test("add then enshell seals a staged unit to an object file", () => {
     assert.equal(e.status, 0, e.stderr);
     assert.match(e.stdout, /sealed:/);
     assert.ok(existsSync(join(work, "add2.o")), "add2.o should be produced");
+  });
+});
+
+test("add --name sets the sealed object to NAME.o", () => {
+  withWork((work) => {
+    assert.equal(run(["add", fixture, "--name", "result"], { cwd: work }).status, 0);
+    const e = run(["enshell"], { cwd: work });
+    assert.equal(e.status, 0, e.stderr);
+    assert.ok(existsSync(join(work, "result.o")), "result.o should be produced");
+    assert.ok(!existsSync(join(work, "add2.o")), "default name should not be used");
+  });
+});
+
+test("add --name with no value exits 1", () => {
+  withWork((work) => {
+    const r = run(["add", fixture, "--name"], { cwd: work });
+    assert.equal(r.status, 1);
+    assert.match(r.stderr, /--name requires a value/);
+  });
+});
+
+test("an unknown option is rejected instead of silently ignored", () => {
+  withWork((work) => {
+    const r = run(["add", fixture, "--bogus"], { cwd: work });
+    assert.equal(r.status, 1);
+    assert.match(r.stderr, /unknown option: --bogus/);
+    assert.match(run(["check", fixture, "--nope"]).stderr, /unknown option: --nope/);
+  });
+});
+
+test("add --name with a path separator is rejected", () => {
+  withWork((work) => {
+    const r = run(["add", fixture, "--name", "../evil"], { cwd: work });
+    assert.equal(r.status, 1);
+    assert.match(r.stderr, /bare filename/);
+  });
+});
+
+test("add rejects a --name already used by another staged unit", () => {
+  withWork((work) => {
+    const other = join(work, "other.c");
+    writeFileSync(other, "int other(void){return 0;}\n");
+    assert.equal(run(["add", fixture, "--name", "result"], { cwd: work }).status, 0);
+    const r = run(["add", other, "--name", "result"], { cwd: work });
+    assert.equal(r.status, 1);
+    assert.match(r.stderr, /output name already staged: result\.o/);
   });
 });
 
