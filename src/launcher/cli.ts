@@ -240,6 +240,12 @@ function cmdAdd(rest: string[]): number {
     console.error("error: --name requires a value");
     return 1;
   }
+  // --name is a bare object stem, not a path: reject separators so the output
+  // can't escape the working dir (we hand it to the engine as the object path).
+  if (nameOpt.value !== undefined && /[/\\]/.test(nameOpt.value)) {
+    console.error("error: --name must be a bare filename (no path separators)");
+    return 1;
+  }
   const unit: Unit = { path: src, levels };
   if (nameOpt.value !== undefined) {
     unit.name = nameOpt.value;

@@ -88,6 +88,14 @@ test("an unknown option is rejected instead of silently ignored", () => {
   });
 });
 
+test("add --name with a path separator is rejected", () => {
+  withWork((work) => {
+    const r = run(["add", fixture, "--name", "../evil"], { cwd: work });
+    assert.equal(r.status, 1);
+    assert.match(r.stderr, /bare filename/);
+  });
+});
+
 test("add without --level defaults to full strength L1,L2,L3", () => {
   withWork((work) => {
     run(["add", fixture], { cwd: work });
