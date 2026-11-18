@@ -28,4 +28,5 @@ bool backend_emit(llvm::Module& m, const std::string& obj_out);  // LLVM: Module
 
 // --- driver (sequences the primitives) ---
 int driver_check(const std::string& src);   // gate verdict only
-int driver_enshell(const std::string& src, const std::vector<std::string>& levels); // full enshell pipeline
+// out = object path to write; empty -> default <stem>.o next to the cwd.
+int driver_enshell(const std::string& src, const std::vector<std::string>& levels, const std::string& out = ""); // full enshell pipeline

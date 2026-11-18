@@ -15,7 +15,9 @@ const pkg = JSON.parse(readFileSync(here("../package.json"), "utf8")) as { versi
 const USAGE = `blackshell <command> [options]
 
   check <source>              Gate verdict only (dummy: accept-all)
-  add   <source> [--level N]  Stage a unit for sealing (N = strength 1..3, cumulative L1..LN; default 3)
+  add   <source> [--level N] [--name NAME]
+                              Stage a unit for sealing (N = strength 1..3, cumulative
+                              L1..LN; default 3). --name sets the output to NAME.o.
   drop  <source>              Unstage a unit
   list                        Show staged units and their levels
   enshell                     Seal every staged unit -> object files
@@ -28,6 +30,7 @@ const STAGE_FILE = ".blackshell/stage.json";
 interface Unit {
   path: string;
   levels: string[];
+  name?: string; // output object stem; absent -> engine defaults to <source stem>
 }
 
 export function readStage(): Unit[] {
@@ -161,11 +164,15 @@ export function onePositional(rest: string[]): string | undefined {
   return positionals[0];
 }
 
-// engine argv for sealing one unit; forwards the staged levels (empty = L0).
+// engine argv for sealing one unit; forwards the staged levels (empty = L0) and,
+// if named, the output path (engine owns file I/O; we pass an opaque path).
 export function enshellArgs(u: Unit): string[] {
   const args = ["enshell", u.path];
   if (u.levels.length > 0) {
     args.push("--level", u.levels.join(","));
+  }
+  if (u.name !== undefined) {
+    args.push("--out", `${u.name}.o`);
   }
   return args;
 }
@@ -187,8 +194,9 @@ function cmdCheck(rest: string[]): number {
 }
 
 function cmdAdd(rest: string[]): number {
-  const opt = popOption(rest, "--level");
-  const src = onePositional(opt.rest);
+  const levelOpt = popOption(rest, "--level");
+  const nameOpt = popOption(levelOpt.rest, "--name");
+  const src = onePositional(nameOpt.rest);
   if (src === undefined) {
     console.error("error: expected exactly one <source> argument");
     return 1;
@@ -201,15 +209,25 @@ function cmdAdd(rest: string[]): number {
     console.error(`error: unsupported source type: ${src} (target: ${TARGET_EXTENSIONS.join(" ")})`);
     return 1;
   }
-  const levels = expandLevel(opt.value);
+  const levels = expandLevel(levelOpt.value);
   if (levels === null) {
     console.error(`error: --level must be an integer 1..${MAX_LEVEL}`);
     return 1;
   }
+  // --name was given but swallowed the next flag / had no value.
+  if (rest.includes("--name") && (nameOpt.value === undefined || nameOpt.value === "" || nameOpt.value.startsWith("--"))) {
+    console.error("error: --name requires a value");
+    return 1;
+  }
+  const unit: Unit = { path: src, levels };
+  if (nameOpt.value !== undefined) {
+    unit.name = nameOpt.value;
+  }
   const units = readStage().filter((u) => u.path !== src);
-  units.push({ path: src, levels });
+  units.push(unit);
   writeStage(units);
-  console.log(`staged: ${src} [${showLevels(levels)}]`);
+  const out = unit.name === undefined ? "" : ` -> ${unit.name}.o`;
+  console.log(`staged: ${src} [${showLevels(levels)}]${out}`);
   return 0;
 }
 
@@ -237,7 +255,8 @@ function cmdList(): number {
     return 0;
   }
   for (const u of units) {
-    console.log(`  ${u.path} [${showLevels(u.levels)}]`);
+    const out = u.name === undefined ? "" : ` -> ${u.name}.o`;
+    console.log(`  ${u.path} [${showLevels(u.levels)}]${out}`);
   }
   return 0;
 }

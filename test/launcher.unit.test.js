@@ -60,6 +60,11 @@ test("enshellArgs forwards staged levels to the engine, omits --level for L0", (
   assert.deepEqual(enshellArgs({ path: "a.c", levels: [] }), ["enshell", "a.c"]);
 });
 
+test("enshellArgs forwards the output name as --out NAME.o when named", () => {
+  assert.deepEqual(enshellArgs({ path: "a.c", levels: [], name: "result" }), ["enshell", "a.c", "--out", "result.o"]);
+  assert.deepEqual(enshellArgs({ path: "a.c", levels: ["L1"], name: "result" }), ["enshell", "a.c", "--level", "L1", "--out", "result.o"]);
+});
+
 test("writeStage/readStage round-trip through the index file", () => {
   const cwd = process.cwd();
   const work = mkdtempSync(join(tmpdir(), "bs-stage-"));

@@ -55,6 +55,24 @@ test("add then enshell seals a staged unit to an object file", () => {
   });
 });
 
+test("add --name sets the sealed object to NAME.o", () => {
+  withWork((work) => {
+    assert.equal(run(["add", fixture, "--name", "result"], { cwd: work }).status, 0);
+    const e = run(["enshell"], { cwd: work });
+    assert.equal(e.status, 0, e.stderr);
+    assert.ok(existsSync(join(work, "result.o")), "result.o should be produced");
+    assert.ok(!existsSync(join(work, "add2.o")), "default name should not be used");
+  });
+});
+
+test("add --name with no value exits 1", () => {
+  withWork((work) => {
+    const r = run(["add", fixture, "--name"], { cwd: work });
+    assert.equal(r.status, 1);
+    assert.match(r.stderr, /--name requires a value/);
+  });
+});
+
 test("add without --level defaults to full strength L1,L2,L3", () => {
   withWork((work) => {
     run(["add", fixture], { cwd: work });

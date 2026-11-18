@@ -25,10 +25,16 @@ int main(int argc, char** argv) {
         if (argc < 3) { std::printf("arg.one_positional\n"); return EXIT_ERR; }
         const std::string src = argv[2];
         if (cmd == "check") { return driver_check(src); }
-        // enshell [--level L1,L2]: the Launcher forwards the staged unit's levels.
+        // enshell [--level L1,L2] [--out path]: the Launcher forwards the staged
+        // unit's levels and (if given via `add --name`) the object path to write.
         std::vector<std::string> levels;
-        if (argc >= 5 && std::string(argv[3]) == "--level") { levels = split_csv(argv[4]); }
-        return driver_enshell(src, levels);
+        std::string out;
+        for (int i = 3; i + 1 < argc; i += 2) {
+            const std::string flag = argv[i];
+            if (flag == "--level") { levels = split_csv(argv[i + 1]); }
+            else if (flag == "--out") { out = argv[i + 1]; }
+        }
+        return driver_enshell(src, levels, out);
     }
     std::printf("cmd.unknown %s\n", cmd.c_str());
     return EXIT_ERR;
