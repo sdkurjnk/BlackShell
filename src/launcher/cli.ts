@@ -251,6 +251,11 @@ function cmdAdd(rest: string[]): number {
     unit.name = nameOpt.value;
   }
   const units = readStage().filter((u) => u.path !== src);
+  // Two units sharing an output name would clobber each other at enshell time.
+  if (unit.name !== undefined && units.some((u) => u.name === unit.name)) {
+    console.error(`error: output name already staged: ${unit.name}.o`);
+    return 1;
+  }
   units.push(unit);
   writeStage(units);
   const out = unit.name === undefined ? "" : ` -> ${unit.name}.o`;

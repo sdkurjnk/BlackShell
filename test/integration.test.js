@@ -96,6 +96,17 @@ test("add --name with a path separator is rejected", () => {
   });
 });
 
+test("add rejects a --name already used by another staged unit", () => {
+  withWork((work) => {
+    const other = join(work, "other.c");
+    writeFileSync(other, "int other(void){return 0;}\n");
+    assert.equal(run(["add", fixture, "--name", "result"], { cwd: work }).status, 0);
+    const r = run(["add", other, "--name", "result"], { cwd: work });
+    assert.equal(r.status, 1);
+    assert.match(r.stderr, /output name already staged: result\.o/);
+  });
+});
+
 test("add without --level defaults to full strength L1,L2,L3", () => {
   withWork((work) => {
     run(["add", fixture], { cwd: work });
