@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { render, showLevels, expandLevel, popOption, onePositional, readStage, writeStage, enshellArgs } from "../dist/cli.js";
+import { render, showLevels, expandLevel, popOption, onePositional, strayOption, readStage, writeStage, enshellArgs, isTargetSource } from "../dist/cli.js";
 
 // Pure launcher units — no engine, no spawn.
 
@@ -36,6 +36,12 @@ test("onePositional returns the lone positional (ignoring flags), else undefined
   assert.equal(onePositional(["a.c", "b.c"]), undefined);
 });
 
+test("strayOption returns the first leftover --flag, else undefined", () => {
+  assert.equal(strayOption(["a.c", "--bogus"]), "--bogus");
+  assert.equal(strayOption(["a.c"]), undefined);
+  assert.equal(strayOption([]), undefined);
+});
+
 test("expandLevel: N -> cumulative {L1..LN}, default full, invalid -> null", () => {
   assert.deepEqual(expandLevel("2"), ["L1", "L2"]);
   assert.deepEqual(expandLevel("1"), ["L1"]);
@@ -46,9 +52,23 @@ test("expandLevel: N -> cumulative {L1..LN}, default full, invalid -> null", () 
   assert.equal(expandLevel("1.5"), null);
 });
 
+test("isTargetSource accepts C/C++ extensions (case-insensitive), rejects others", () => {
+  assert.equal(isTargetSource("a.c"), true);
+  assert.equal(isTargetSource("a.cpp"), true);
+  assert.equal(isTargetSource("dir/a.CXX"), true); // case-insensitive
+  assert.equal(isTargetSource("a.h"), false); // header is not a compile unit
+  assert.equal(isTargetSource("a.rs"), false);
+  assert.equal(isTargetSource("Makefile"), false); // no extension
+});
+
 test("enshellArgs forwards staged levels to the engine, omits --level for L0", () => {
   assert.deepEqual(enshellArgs({ path: "a.c", levels: ["L1", "L2"] }), ["enshell", "a.c", "--level", "L1,L2"]);
   assert.deepEqual(enshellArgs({ path: "a.c", levels: [] }), ["enshell", "a.c"]);
+});
+
+test("enshellArgs forwards the output name as --out NAME.o when named", () => {
+  assert.deepEqual(enshellArgs({ path: "a.c", levels: [], name: "result" }), ["enshell", "a.c", "--out", "result.o"]);
+  assert.deepEqual(enshellArgs({ path: "a.c", levels: ["L1"], name: "result" }), ["enshell", "a.c", "--level", "L1", "--out", "result.o"]);
 });
 
 test("writeStage/readStage round-trip through the index file", () => {

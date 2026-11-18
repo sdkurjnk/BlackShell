@@ -26,8 +26,8 @@ int driver_check(const std::string& src) {
 
 // Enshell pipeline: frontend -> gate -> noising -> backend -> artifact. Emits
 // structured tokens on stdout; the Launcher renders them.
-int driver_enshell(const std::string& src, const std::vector<std::string>& levels) {
-    const std::string obj = stem(src) + ".o";
+int driver_enshell(const std::string& src, const std::vector<std::string>& levels, const std::string& out) {
+    const std::string obj = out.empty() ? stem(src) + ".o" : out;
     llvm::LLVMContext ctx;
     std::unique_ptr<llvm::Module> m = frontend_compile(src, ctx);
     if (!m) { std::printf("frontend.failed %s\n", src.c_str()); return EXIT_ERR; }
