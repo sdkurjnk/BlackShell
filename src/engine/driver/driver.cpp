@@ -30,10 +30,10 @@ Status driver_check(const std::string& src) {
     return Status::GateOk;
 }
 
-// Enshell pipeline as a handoff chain: each stage does its work, then calls the
-// next stage itself (frontend -> gate -> noising -> harness -> backend).
-// A stage hands the next only the data it produced; its own config is captured
-// here at assembly, never relayed through stages that don't use it.
+// Enshell pipeline as a handoff chain: 
+// each stage does its work, then calls the next stage itself (frontend -> gate -> noising -> harness -> backend).
+// A stage hands the next only the data it produced; 
+// its own config is captured here at assembly, never relayed through stages that don't use it.
 // Each stage returns a Status; the boundary turns that into a token and exit code.
 // Assembled bottom-up so each stage can capture the next.
 Status driver_enshell(const std::string& src, const std::vector<std::string>& levels, const std::string& out) {
@@ -57,8 +57,8 @@ Status driver_enshell(const std::string& src, const std::vector<std::string>& le
     };
 
     auto noising = [&levels, &harness](llvm::Module& m) -> Status {
-        // L0 baseline: snapshot before noising so the harness compares against
-        // the pre-noise Module (identity noising makes them equal for now).
+        // L0 baseline: snapshot before noising so the harness compares against the pre-noise Module
+        // (identity noising makes them equal for now).
         std::unique_ptr<llvm::Module> baseline = llvm::CloneModule(m);
 
         if (!noising_apply(m, levels)) {

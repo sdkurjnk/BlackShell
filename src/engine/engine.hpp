@@ -8,20 +8,19 @@ namespace llvm { class Module; class LLVMContext; }
 // BlackShell engine — the contract shared across the enshell pipeline.
 // The Driver runs the primitives as a handoff chain, each stage calling the next
 // (frontend -> gate -> noising -> harness -> backend).
-// Each primitive lives in its own translation unit, so a real implementation
-// drops in without touching the others (docs/Architecture.md).
-//
+// Each primitive lives in its own translation unit,
+// so a real implementation drops in without touching the others (docs/Architecture.md).
+
 // IR is handed between stages as an in-memory llvm::Module.
-// The frontend embeds Clang (EmitLLVMOnlyAction) and the backend embeds LLVM
-// (TargetMachine), so the pipeline is self-contained — no clang/llc on the
-// user's PATH (#15).
+// The frontend embeds Clang (EmitLLVMOnlyAction) and the backend embeds LLVM (TargetMachine),
+// so the pipeline is self-contained — no clang/llc on the user's PATH (#15).
 
 enum ExitCode { EXIT_OK = 0, EXIT_ERR = 1, EXIT_REJECT = 2 };
 
 // Outcome of a driver (or argv) step.
-// The engine deals only in these codes; the boundary (main.cpp) maps each to a
-// bare wire token and an exit code, and the Launcher renders the user-facing
-// message from its own staged data.
+// The engine deals only in these codes;
+// the boundary (main.cpp) maps each to a bare wire token and an exit code, 
+// and the Launcher renders the user-facing message from its own staged data.
 enum class Status {
     Sealed,            // enshell sealed the unit
     GateOk,            // check: unit is eligible

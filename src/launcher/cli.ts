@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-// BlackShell Launcher (TS). Owns the CLI: parsing, the command set, the staging
-// index and message rendering (docs/Architecture.md §5 hybrid). The C++ engine
-// exposes per-unit primitives (check, enshell); the Launcher composes them — e.g.
-// `enshell` seals every staged unit by calling the engine's enshell per unit.
+// BlackShell Launcher (TS). 
+// Owns the CLI: parsing, the command set, the staging index and message rendering (docs/Architecture.md §5 hybrid).
+// The C++ engine exposes per-unit primitives (check, enshell); the Launcher composes them 
+// e.g. `enshell` seals every staged unit by calling the engine's enshell per unit.
 import { spawnSync } from "node:child_process";
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -74,10 +74,10 @@ export function showLevels(levels: string[]): string {
   return levels.join(",");
 }
 
-// Resolve the engine binary. The published package pulls the matching engine as an
-// optional dependency @sdkurjnk/blackshell-<platform>-<arch> (os/cpu-gated, so npm
-// installs only the host's); resolve its binary. A local dev build in build/ is the
-// fallback when no platform package is installed.
+// Resolve the engine binary. 
+// The published package pulls the matching engine as an optional dependency @sdkurjnk/blackshell-<platform>-<arch> 
+// (os/cpu-gated, so npm installs only the host's); 
+// resolve its binary. A local dev build in build/ is the fallback when no platform package is installed.
 function enginePath(): string {
   const exe = process.platform === "win32" ? "blackshell-engine.exe" : "blackshell-engine";
   const pkg = `@sdkurjnk/blackshell-${process.platform}-${process.arch}`;
@@ -101,9 +101,9 @@ function engine(args: string[]): { token: string; status: number } {
   return { token, status: res.status ?? 1 };
 }
 
-// engine code -> rendered message. The engine emits a bare token; we fill the
-// source and object paths from the staged unit (ctx), so the engine never has
-// to echo them. The engine never renders.
+// engine code -> rendered message. The engine emits a bare token; 
+// we fill the source and object paths from the staged unit (ctx), 
+// so the engine never has to echo them. The engine never renders.
 export function render(token: string, ctx: { src?: string; obj?: string }): { line: string; err: boolean } {
   switch (token) {
     case "gate.ok": {
@@ -185,9 +185,9 @@ export function enshellArgs(u: Unit): string[] {
   return args;
 }
 
-// The object path the engine writes for a unit, mirroring the engine's default
-// (<stem>.o): the --name stem if set, else the source's basename stem. Used to
-// render the sealed line, since the engine no longer echoes the path.
+// The object path the engine writes for a unit, mirroring the engine's default(<stem>.o):
+// the --name stem if set, else the source's basename stem. 
+// Used to render the sealed line, since the engine no longer echoes the path.
 export function objOf(u: Unit): string {
   const stem = u.name ?? basename(u.path, extname(u.path));
   return `${stem}.o`;
@@ -249,8 +249,8 @@ function cmdAdd(rest: string[]): number {
     console.error("error: --name requires a value");
     return 1;
   }
-  // --name is a bare object stem, not a path: reject separators so the output
-  // can't escape the working dir (we hand it to the engine as the object path).
+  // --name is a bare object stem, not a path: 
+  // reject separators so the output can't escape the working dir (we hand it to the engine as the object path).
   if (nameOpt.value !== undefined && /[/\\]/.test(nameOpt.value)) {
     console.error("error: --name must be a bare filename (no path separators)");
     return 1;
