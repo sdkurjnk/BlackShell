@@ -15,27 +15,45 @@ static std::vector<std::string> split_csv(const std::string& s) {
     return out;
 }
 
-// Entry point: parse the command and hand it to the Driver. The TS Launcher
-// owns real CLI parsing and message rendering; this is the engine's thin
-// dispatch, returning structured tokens on stdout (docs/Architecture.md §5).
+// Entry point: parse the command and hand it to the Driver. 
+// The TS Launcher owns real CLI parsing and message rendering; 
+// this is the engine's thin dispatch, returning structured tokens on stdout (docs/Architecture.md §5).
 int main(int argc, char** argv) {
-    if (argc < 2) { std::printf("usage\n"); return EXIT_OK; }
+    if (argc < 2) {
+        std::printf("usage\n");
+        return EXIT_OK;
+    }
+
     const std::string cmd = argv[1];
-    if (cmd == "check" || cmd == "enshell") {
-        if (argc < 3) { std::printf("arg.one_positional\n"); return EXIT_ERR; }
+
+    if (cmd == "check" || cmd == "enshell"){
+        if (argc < 3) {
+            std::printf("arg.one_positional\n");
+            return EXIT_ERR;
+        }
+
         const std::string src = argv[2];
-        if (cmd == "check") { return driver_check(src); }
-        // enshell [--level L1,L2] [--out path]: the Launcher forwards the staged
-        // unit's levels and (if given via `add --name`) the object path to write.
+
+        if (cmd == "check") {return driver_check(src);}
+        // enshell [--level L1,L2] [--out path]:
+        // the Launcher forwards the staged unit's levels and (if given via `add --name`) the object path to write.
+
         std::vector<std::string> levels;
         std::string out;
-        for (int i = 3; i + 1 < argc; i += 2) {
+
+        for (int i = 3; i + 1 < argc; i += 2){
             const std::string flag = argv[i];
-            if (flag == "--level") { levels = split_csv(argv[i + 1]); }
-            else if (flag == "--out") { out = argv[i + 1]; }
+
+            if (flag == "--level") {
+                levels = split_csv(argv[i + 1]);
+            }
+            else if (flag == "--out") {out = argv[i + 1];}
         }
+
         return driver_enshell(src, levels, out);
     }
+
     std::printf("cmd.unknown %s\n", cmd.c_str());
+
     return EXIT_ERR;
 }
