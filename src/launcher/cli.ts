@@ -7,7 +7,7 @@ import { spawnSync } from "node:child_process";
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
-import { dirname, join, extname } from "node:path";
+import { dirname, join, extname, basename } from "node:path";
 
 const here = (p: string): string => fileURLToPath(new URL(p, import.meta.url));
 const pkg = JSON.parse(readFileSync(here("../package.json"), "utf8")) as { version: string };
@@ -101,33 +101,34 @@ function engine(args: string[]): { token: string; status: number } {
   return { token, status: res.status ?? 1 };
 }
 
-// engine token -> rendered message. The engine never renders.
-export function render(token: string): { line: string; err: boolean } {
-  const [key, ...a] = token.split(" ");
-  switch (key) {
+// engine code -> rendered message. The engine emits a bare token; we fill the
+// source and object paths from the staged unit (ctx), so the engine never has
+// to echo them. The engine never renders.
+export function render(token: string, ctx: { src?: string; obj?: string }): { line: string; err: boolean } {
+  switch (token) {
     case "gate.ok": {
-      return { line: `pass: ${a[0]} is eligible`, err: false };
+      return { line: `pass: ${ctx.src} is eligible`, err: false };
     }
     case "gate.reject": {
-      return { line: `reject: ${a[0]} — ineligible`, err: true };
+      return { line: `reject: ${ctx.src} — ineligible`, err: true };
     }
     case "sealed": {
-      return { line: `sealed: ${a[0]} -> ${a[1]}`, err: false };
+      return { line: `sealed: ${ctx.src} -> ${ctx.obj}`, err: false };
     }
     case "frontend.failed": {
-      return { line: `error: clang (frontend) failed on ${a[0]}`, err: true };
+      return { line: `error: clang (frontend) failed on ${ctx.src}`, err: true };
     }
     case "backend.failed": {
-      return { line: `error: llc (backend) failed on ${a[0]}`, err: true };
+      return { line: `error: llc (backend) failed on ${ctx.src}`, err: true };
     }
     case "verify.broken": {
-      return { line: `error: noising broke equivalence on ${a[0]}`, err: true };
+      return { line: `error: noising broke equivalence on ${ctx.src}`, err: true };
     }
     case "arg.one_positional": {
       return { line: `error: expected exactly one <source> argument`, err: true };
     }
     case "cmd.unknown": {
-      return { line: `error: unknown command: ${a[0]}`, err: true };
+      return { line: `error: unknown command`, err: true };
     }
     default: {
       return { line: token, err: true };
@@ -135,11 +136,11 @@ export function render(token: string): { line: string; err: boolean } {
   }
 }
 
-function emit(token: string): void {
+function emit(token: string, ctx: { src?: string; obj?: string }): void {
   if (!token) {
     return;
   }
-  const { line, err } = render(token);
+  const { line, err } = render(token, ctx);
   if (err) {
     console.error(line);
   } else {
@@ -184,6 +185,14 @@ export function enshellArgs(u: Unit): string[] {
   return args;
 }
 
+// The object path the engine writes for a unit, mirroring the engine's default
+// (<stem>.o): the --name stem if set, else the source's basename stem. Used to
+// render the sealed line, since the engine no longer echoes the path.
+export function objOf(u: Unit): string {
+  const stem = u.name ?? basename(u.path, extname(u.path));
+  return `${stem}.o`;
+}
+
 // --- commands ---
 function cmdCheck(rest: string[]): number {
   const stray = strayOption(rest);
@@ -205,7 +214,7 @@ function cmdCheck(rest: string[]): number {
     return 1;
   }
   const { token, status } = engine(["check", src]);
-  emit(token);
+  emit(token, { src });
   return status;
 }
 
@@ -307,7 +316,7 @@ function cmdEnshell(): number {
   let code = 0;
   for (const u of units) {
     const { token, status } = engine(enshellArgs(u));
-    emit(token);
+    emit(token, { src: u.path, obj: objOf(u) });
     if (status !== 0) {
       code = status;
     }

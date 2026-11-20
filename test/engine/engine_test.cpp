@@ -43,8 +43,8 @@ int main(int argc, char** argv) {
     }
 
     // --- driver (sequencer) ---
-    check(driver_check(src) == EXIT_OK, "driver_check: dummy gate -> EXIT_OK");
-    check(driver_enshell(src, {"L3"}) == EXIT_OK, "driver_enshell: full pipeline -> EXIT_OK");
+    check(driver_check(src) == Status::GateOk, "driver_check: dummy gate -> GateOk");
+    check(driver_enshell(src, {"L3"}) == Status::Sealed, "driver_enshell: full pipeline -> Sealed");
     check(fs::exists(obj), "driver_enshell: produces <stem>.o artifact");
 
     std::printf("\n%d failure(s)\n", failures);

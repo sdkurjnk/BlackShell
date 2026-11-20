@@ -18,6 +18,23 @@ namespace llvm { class Module; class LLVMContext; }
 
 enum ExitCode { EXIT_OK = 0, EXIT_ERR = 1, EXIT_REJECT = 2 };
 
+// Outcome of a driver (or argv) step.
+// The engine deals only in these codes; the boundary (main.cpp) maps each to a
+// bare wire token and an exit code, and the Launcher renders the user-facing
+// message from its own staged data.
+enum class Status {
+    Sealed,            // enshell sealed the unit
+    GateOk,            // check: unit is eligible
+    GateReject,        // gate rejected the unit
+    FrontendFailed,
+    NoisingFailed,
+    VerifyBroken,
+    BackendFailed,
+    ArgOnePositional,  // argv: expected exactly one source
+    CmdUnknown,        // argv: unknown subcommand
+    Usage,             // argv: no subcommand given
+};
+
 // --- primitives (orthogonal; see frontend/gate/noising/backend .cpp) ---
 // Clang: C source file -> in-memory Module (nullptr on failure).
 // The caller owns the LLVMContext, which must outlive the returned Module.
@@ -29,6 +46,6 @@ bool harness_verify(const llvm::Module& baseline, const llvm::Module& transforme
 bool backend_emit(llvm::Module& m, const std::string& obj_out);  // LLVM: Module -> object
 
 // --- driver (runs the primitives as a chain) ---
-int driver_check(const std::string& src);   // gate verdict only
+Status driver_check(const std::string& src);   // gate verdict only
 // out = object path to write; empty -> default <stem>.o next to the cwd.
-int driver_enshell(const std::string& src, const std::vector<std::string>& levels, const std::string& out = ""); // full enshell pipeline
+Status driver_enshell(const std::string& src, const std::vector<std::string>& levels, const std::string& out = ""); // full enshell pipeline
