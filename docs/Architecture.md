@@ -10,54 +10,10 @@
 소유하고, 유닛마다 엔진 바이너리를 서브프로세스로 띄워 primitive(`check`/`enshell`)를 호출한다. 엔진은
 구조화된 토큰 한 줄 + exit code만 돌려주고, 사용자 메시지 렌더는 Launcher가 한다.
 
-```mermaid
-flowchart TD
-    USER(["사용자 CLI<br/>$ blackshell add add2.c --level 2"]):::user
+![그림 1. 컴포넌트 계층](image/Architecture.png)
 
-    subgraph LAUNCHER["Launcher — TS / npm 패키지 (src/launcher/cli.ts)"]
-        PARSE["CLI 파싱 · 명령셋<br/>check/add/drop/list/enshell"]:::js
-        STAGEMOD["스테이징 인덱스<br/>read/writeStage"]:::js
-        RENDER["render(token)<br/>토큰 → 사용자 메시지"]:::js
-    end
-
-    subgraph SEAM["경계 (01-cli-seam)"]
-        direction LR
-        PROTO["프로토콜: argv in · stdout 토큰 한 줄 · exit code<br/>서브프로세스 spawn"]:::seam
-    end
-
-    subgraph ENGINE["엔진 — C++ 바이너리 (src/engine/, build/blackshell-engine)"]
-        MAIN["main.cpp<br/>명령 dispatch"]:::ours
-        DRV["driver.cpp<br/>primitive 시퀀서 (check/enshell)"]:::ours
-        FE["frontend.cpp — 임베드 Clang (블랙박스)"]:::box
-        GATE["gate.cpp — 격리 조건 (더미 accept-all)"]:::ours
-        NOISE["noising.cpp — L1~L3 (더미 identity)"]:::ours
-        HARN["harness.cpp — EquivalenceHarness (더미)"]:::ours
-        BE["backend.cpp — 임베드 LLVM (블랙박스)"]:::box
-    end
-
-    STAGEFILE[(".blackshell/stage.json<br/>git index 유사")]:::state
-    OUT[("&lt;name&gt;.o<br/>봉인 산출물 (오브젝트)")]:::out
-
-    USER -->|argv| PARSE
-    PARSE --> STAGEMOD
-    PARSE -->|"enshell/check <path>"| PROTO
-    PROTO --> MAIN --> DRV
-    DRV --> FE --> GATE --> NOISE --> HARN --> BE
-    BE --> OUT
-    STAGEMOD <--> STAGEFILE
-    PROTO -->|"토큰 · exit code"| RENDER
-
-    classDef user fill:#eeeeff,stroke:#8888aa,color:#000;
-    classDef js fill:#fff3cd,stroke:#d39e00,color:#000;
-    classDef seam fill:#f0f0f0,stroke:#999,color:#000,stroke-dasharray:4 3;
-    classDef ours fill:#2d2d2d,color:#fff,stroke:#ff9800,stroke-width:2px;
-    classDef box fill:#2d2d2d,color:#fff,stroke:#888,stroke-width:2px,stroke-dasharray:4 3;
-    classDef state fill:#e8f0fe,stroke:#4285f4,color:#000;
-    classDef out fill:#e6ffed,stroke:#22aa77,color:#000;
-```
-
-**그림 1. 컴포넌트 계층.** 노랑 = Launcher, 점선 = 경계, 주황 테두리 = 우리 IP primitive,
-점선 테두리 = LLVM 블랙박스(임베드 Clang/LLVM). IR(LLVM)은 엔진 안 primitive 사이를 **인메모리 `llvm::Module`**로 오간다.
+**그림 1. 컴포넌트 계층.** 회색 = 우리 IP(Gate·Noising·EquivalenceHarness), 흰 박스 = LLVM 블랙박스/데이터 경로,
+점선 화살표 = control/verify. IR(LLVM)은 엔진 안 primitive 사이를 **인메모리 `llvm::Module`**로 오간다.
 
 ---
 
@@ -66,40 +22,7 @@ flowchart TD
 봉인 본체(`driver_enshell`). 순서 고정 — `Clang → gate → noising → harness → LLVM → artifact`. 모든 단계가
 같은 계약(인메모리 `llvm::Module` in/out)을 지킨다. 등가검증은 플래그가 아니라 상시 내장.
 
-```mermaid
-flowchart TD
-    START(["enshell &lt;source&gt;"]):::user
-    FE["frontend_compile<br/>임베드 Clang → Module"]:::box
-    FEFAIL["frontend.failed → exit 1"]:::reject
-    GATE{"gate_check (더미 accept-all)<br/>격리 정적검사 자리"}:::ours
-    REJ["gate.reject → exit 2"]:::reject
-    NOISE["noising_apply L1~L3 (더미 identity, in place)"]:::ours
-    NFAIL["noising.failed → exit 1"]:::reject
-    VERIFY{"harness_verify<br/>baseline(L0) vs 변환 IR · 상시"}:::verify
-    BROKEN["verify.broken → exit 1"]:::reject
-    BE["backend_emit<br/>임베드 LLVM → &lt;name&gt;.o"]:::box
-    BEFAIL["backend.failed → exit 1"]:::reject
-    DONE(["sealed &lt;src&gt; &lt;obj&gt;"]):::out
-
-    START --> FE
-    FE -->|실패| FEFAIL
-    FE --> GATE
-    GATE -->|위반| REJ
-    GATE -->|통과| NOISE
-    NOISE -->|실패| NFAIL
-    NOISE --> VERIFY
-    VERIFY -->|불일치| BROKEN
-    VERIFY -->|일치| BE
-    BE -->|실패| BEFAIL
-    BE --> DONE
-
-    classDef user fill:#eeeeff,stroke:#8888aa,color:#000;
-    classDef ours fill:#2d2d2d,color:#fff,stroke:#ff9800,stroke-width:2px;
-    classDef box fill:#2d2d2d,color:#fff,stroke:#888,stroke-width:2px,stroke-dasharray:4 3;
-    classDef reject fill:#ffdddd,stroke:#cc0000,color:#000;
-    classDef verify fill:#e6ffed,stroke:#22aa77,color:#000;
-    classDef out fill:#fff3cd,stroke:#d39e00,color:#000;
-```
+![그림 2. enshell 파이프라인](image/process_pipeline.png)
 
 **그림 2. enshell 파이프라인.** 게이트 = 노이징 앞 go/no-go, harness = 노이징 뒤 안전망. Launcher의
 `enshell`이 스테이징된 유닛마다 엔진 `enshell`을 한 번씩 호출하고 완료 후 스테이징을 비운다(1-shot).
