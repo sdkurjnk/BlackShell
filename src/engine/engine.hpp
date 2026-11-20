@@ -39,9 +39,12 @@ enum class Status {
 // The caller owns the LLVMContext, which must outlive the returned Module.
 std::unique_ptr<llvm::Module> frontend_compile(const std::string& src, llvm::LLVMContext& ctx);
 bool gate_check(const llvm::Module& m);                 // isolation condition; dummy accept-all
+// LLVM opt (not our IP): real middle-end optimization, in place.
+void optimize_apply(llvm::Module& m);
 // levels = the orthogonal dials to apply (e.g. {"L1","L3"}); empty = L0 identity.
 bool noising_apply(llvm::Module& m, const std::vector<std::string>& levels);  // L1-L3 in place; dummy identity
-bool harness_verify(const llvm::Module& baseline, const llvm::Module& transformed);  // L0 vs transformed; dummy = equivalent
+// pure_obj vs noised_obj (both emitted); dummy = always equivalent.
+bool harness_verify(const std::string& pure_obj, const std::string& noised_obj);
 bool backend_emit(llvm::Module& m, const std::string& obj_out);  // LLVM: Module -> object
 
 // --- driver (runs the primitives as a chain) ---

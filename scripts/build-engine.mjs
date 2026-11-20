@@ -24,7 +24,7 @@ const OUT = "build";
 const OBJ = join(OUT, "obj");
 
 const ENGINE_SRC = "src/engine";
-const CORE = ["driver/driver", "front/frontend", "middle/gate", "middle/noising", "middle/harness", "back/backend"];
+const CORE = ["driver/driver", "front/frontend", "middle/gate", "middle/optimize", "middle/noising", "middle/harness", "back/backend"];
 
 function sh(cmd, args) {
   return execFileSync(cmd, args, { encoding: "utf8" }).trim();

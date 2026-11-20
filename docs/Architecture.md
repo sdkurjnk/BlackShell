@@ -20,15 +20,16 @@
 ## 2. enshell 파이프라인
 
 봉인 본체(`driver_enshell`)는 핸드오프 체인 — 각 단계가 제 일을 하고 다음 단계를 직접 호출한다.
-현재 순서는 선형: `Clang → gate → noising → harness → LLVM → artifact`. 모든 단계가
-같은 계약(인메모리 `llvm::Module` in/out)을 지키고, 등가검증은 플래그가 아니라 상시 내장이다.
+순서: `Clang → gate → optimize → (fork) → noising → codegen → harness`. Optimization 뒤에서
+pure/noised로 갈라져 둘 다 `.o`로 emit되고, harness가 두 오브젝트를 비교한다.
+noised.o = 봉인 산출물, pure.o = harness용 스크래치(검증 후 삭제). 등가검증은 플래그가 아니라 상시 내장이다.
 
-![그림 2. 목표 enshell 파이프라인](image/process_pipeline.png)
+![그림 2. enshell 파이프라인](image/process_pipeline.png)
 
-**그림 2. 목표 enshell 파이프라인.** 게이트 = 노이징 앞 go/no-go, harness = 노이징 뒤 안전망. Launcher의
-`enshell`이 스테이징된 유닛마다 엔진 `enshell`을 한 번씩 호출하고 완료 후 스테이징을 비운다(1-shot).
-이미지는 **목표 형태**(Optimization·pure/noised 이중경로·machine code 비교)이고, 현재 `driver_enshell`은
-그 **선형 부분집합**(Optimization·이중 emit·.o 비교 미구현)이다.
+**그림 2. enshell 파이프라인.** 흰색(frontend·Optimization·Code Generator·backend)은 전부 **진짜 연결**,
+회색(gate·noising·harness)은 **바디만 더미**지만 flow는 통과한다. Optimization은 진짜 LLVM opt(O2),
+harness는 두 `.o`를 받지만 바디는 아직 더미(`true`) — 진짜 링크·실행 비교는 실제 noising과 함께 들어온다.
+Launcher의 `enshell`이 스테이징된 유닛마다 엔진 `enshell`을 한 번씩 호출하고 완료 후 스테이징을 비운다(1-shot).
 
 ---
 

@@ -4,6 +4,7 @@
 #include "llvm/IR/Module.h"
 #include "llvm/Transforms/Utils/Cloning.h"
 
+#include <cstdio>
 #include <string>
 
 static std::string stem(const std::string& path) {
@@ -30,50 +31,71 @@ Status driver_check(const std::string& src) {
     return Status::GateOk;
 }
 
-// Enshell pipeline as a handoff chain: 
-// each stage does its work, then calls the next stage itself (frontend -> gate -> noising -> harness -> backend).
-// A stage hands the next only the data it produced; 
+// Enshell pipeline as a handoff chain:
+// each stage does its work, then calls the next stage itself
+// (frontend -> gate -> optimize -> noising -> codegen -> harness).
+// After optimization the flow forks: pure keeps the optimized IR, the noised
+// branch goes through noising; the code generator emits both objects and the
+// harness compares them. noised.o is the sealed artifact, pure.o is scratch.
+// A stage hands the next only the data it produced;
 // its own config is captured here at assembly, never relayed through stages that don't use it.
 // Each stage returns a Status; the boundary turns that into a token and exit code.
 // Assembled bottom-up so each stage can capture the next.
 Status driver_enshell(const std::string& src, const std::vector<std::string>& levels, const std::string& out) {
     const std::string obj = out.empty() ? stem(src) + ".o" : out;
+    const std::string pureObj = obj + ".pure.o";   // scratch for the harness
     llvm::LLVMContext ctx;
 
-    auto backend = [&obj](llvm::Module& m) -> Status {
-        if (!backend_emit(m, obj)) {
-            return Status::BackendFailed;
+    // Harness (our IP, dummy): compare the two emitted objects.
+    auto harness = [](const std::string& pure, const std::string& noised) -> Status {
+        if (!harness_verify(pure, noised)) {
+            return Status::VerifyBroken;
         }
 
         return Status::Sealed;
     };
 
-    auto harness = [&backend](llvm::Module& baseline, llvm::Module& m) -> Status {
-        if (!harness_verify(baseline, m)) {
-            return Status::VerifyBroken;
+    // Code Generator (LLVM): emit both objects, verify, then drop the scratch.
+    // noised.o is the sealed artifact; pure.o exists only for the harness.
+    auto codegen = [&obj, &pureObj, &harness](llvm::Module& pure, llvm::Module& noised) -> Status {
+        if (!backend_emit(pure, pureObj)) {
+            return Status::BackendFailed;
         }
 
-        return backend(m);
+        if (!backend_emit(noised, obj)) {
+            std::remove(pureObj.c_str());
+            return Status::BackendFailed;
+        }
+
+        const Status s = harness(pureObj, obj);
+        std::remove(pureObj.c_str());
+        return s;
     };
 
-    auto noising = [&levels, &harness](llvm::Module& m) -> Status {
-        // L0 baseline: snapshot before noising so the harness compares against the pre-noise Module
-        // (identity noising makes them equal for now).
-        std::unique_ptr<llvm::Module> baseline = llvm::CloneModule(m);
-
-        if (!noising_apply(m, levels)) {
+    // Noising (our IP, dummy identity): transforms only the noised branch.
+    auto noising = [&levels, &codegen](llvm::Module& pure, llvm::Module& noised) -> Status {
+        if (!noising_apply(noised, levels)) {
             return Status::NoisingFailed;
         }
 
-        return harness(*baseline, m);
+        return codegen(pure, noised);
     };
 
-    auto gate = [&noising](llvm::Module& m) -> Status {
+    // Optimization (LLVM): optimize in place, then fork -- pure keeps the
+    // optimized, pre-noise IR; the noised branch carries on.
+    auto optimize = [&noising](llvm::Module& m) -> Status {
+        optimize_apply(m);
+        std::unique_ptr<llvm::Module> pure = llvm::CloneModule(m);
+        return noising(*pure, m);
+    };
+
+    // Gate (our IP, dummy accept-all).
+    auto gate = [&optimize](llvm::Module& m) -> Status {
         if (!gate_check(m)) {
             return Status::GateReject;
         }
 
-        return noising(m);
+        return optimize(m);
     };
 
     std::unique_ptr<llvm::Module> m = frontend_compile(src, ctx);

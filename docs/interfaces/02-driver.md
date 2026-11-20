@@ -24,11 +24,12 @@ git 2단계 — `add`로 스테이징 → `enshell`로 전체 봉인(`git commit
 ## 파이프라인 순서 (엔진 `enshell` = `driver_enshell`, 고정)
 
 ```
-frontend(Clang) → gate → noising(L1~L3) → harness(baseline vs 변환) → backend(LLVM) → "sealed"
+frontend(Clang) → gate → optimize(LLVM) → [fork] → noising(L1~L3) → codegen(LLVM, pure.o+noised.o) → harness(두 .o 비교) → "sealed"
 ```
 
-- 실패 토큰: `frontend.failed` · `gate.reject`(exit 2) · `noising.failed` · `verify.broken` · `backend.failed`.
-- 불변식: 게이트 = 노이징 **앞**(거부 시 중단), harness = 노이징 **뒤** 상시 내장.
+- fork는 Optimization **뒤**: pure = 최적화·무노이즈, noised = 최적화+노이즈. noised.o = 산출물, pure.o = harness 스크래치(삭제).
+- 실패 토큰: `frontend.failed` · `gate.reject`(exit 2) · `noising.failed` · `verify.broken` · `backend.failed`. (optimize는 실패 토큰 없음)
+- 불변식: 게이트 = 노이징 **앞**(거부 시 중단), harness = codegen **뒤**(두 .o 비교) 상시 내장.
 - 각 단계가 같은 계약(인메모리 `llvm::Module` in/out, 문서 04)을 지킨다.
 
 엔진은 문구 대신 토큰 한 줄 + exit code만 내고, 렌더는 Launcher(문서 01).
