@@ -17,13 +17,14 @@ IR을 in place 변환. 의미 보존이 절대 불변식(하네스가 뒤에서 
 (예 `{L1,L2}`, 빈 집합=L0 항등). 사다리 아님·단일 다이얼 아님 — 집합이라야 하네스가 패스별로 켠다.
 Launcher→엔진까지 배선 완료(문서 02). 더미(`noising.cpp`) = **항등**(levels 무시).
 
-## 등가검증 `harness_verify(baseline, transformed) -> bool` (우리 IP)
+## 등가검증 `harness_verify(pure_obj, noised_obj) -> bool` (우리 IP)
 
-문서 05. 더미는 항상 `true`.
+문서 05. pure.o vs noised.o를 비교. 더미는 항상 `true`.
 
-## 프론트엔드 / 백엔드 (LLVM 블랙박스)
+## 프론트엔드 / 최적화 / 백엔드 (LLVM, 비-IP · 진짜 구현)
 
 ```cpp
 std::unique_ptr<llvm::Module> frontend_compile(const std::string& src, llvm::LLVMContext& ctx);  // 임베드 Clang: source → Module
+void optimize_apply(llvm::Module& m);                                                           // LLVM opt(O2): Module in place
 bool backend_emit(llvm::Module& m, const std::string& obj_out);                                 // 임베드 LLVM: Module → .o
 ```

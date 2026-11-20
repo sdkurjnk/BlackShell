@@ -16,7 +16,7 @@
 
 import { execFileSync } from "node:child_process";
 import { readdirSync, mkdirSync, existsSync } from "node:fs";
-import { join } from "node:path";
+import { join, basename } from "node:path";
 
 const OS = process.platform; // 'win32' | 'linux' | 'darwin'
 const EXE = OS === "win32" ? ".exe" : "";
@@ -24,7 +24,7 @@ const OUT = "build";
 const OBJ = join(OUT, "obj");
 
 const ENGINE_SRC = "src/engine";
-const CORE = ["driver", "frontend", "gate", "noising", "harness", "backend"];
+const CORE = ["driver/driver", "front/frontend", "middle/gate", "middle/optimize", "middle/noising", "middle/harness", "back/backend"];
 
 function sh(cmd, args) {
   return execFileSync(cmd, args, { encoding: "utf8" }).trim();
@@ -134,7 +134,7 @@ function compile(src, obj) {
 }
 
 const coreObjs = CORE.map((n) => {
-  const o = join(OBJ, `${n}.o`);
+  const o = join(OBJ, `${basename(n)}.o`);
   compile(join(ENGINE_SRC, `${n}.cpp`), o);
   return o;
 });

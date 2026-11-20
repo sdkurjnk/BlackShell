@@ -7,15 +7,15 @@ import { render, showLevels, expandLevel, popOption, onePositional, strayOption,
 
 // Pure launcher units — no engine, no spawn.
 
-test("render maps engine tokens to user messages", () => {
-  assert.deepEqual(render("gate.ok a.c"), { line: "pass: a.c is eligible", err: false });
-  assert.equal(render("gate.reject a.c").err, true);
-  assert.deepEqual(render("sealed a.c a.o"), { line: "sealed: a.c -> a.o", err: false });
-  assert.equal(render("frontend.failed a.c").err, true);
-  assert.equal(render("backend.failed a.c").err, true);
-  assert.equal(render("verify.broken a.c").err, true);
+test("render maps engine codes to user messages", () => {
+  assert.deepEqual(render("gate.ok", { src: "a.c" }), { line: "pass: a.c is eligible", err: false });
+  assert.equal(render("gate.reject", { src: "a.c" }).err, true);
+  assert.deepEqual(render("sealed", { src: "a.c", obj: "a.o" }), { line: "sealed: a.c -> a.o", err: false });
+  assert.equal(render("frontend.failed", { src: "a.c" }).err, true);
+  assert.equal(render("backend.failed", { src: "a.c" }).err, true);
+  assert.equal(render("verify.broken", { src: "a.c" }).err, true);
   // unknown token falls through to the raw token as an error line
-  assert.deepEqual(render("weird.token x"), { line: "weird.token x", err: true });
+  assert.deepEqual(render("weird.token", {}), { line: "weird.token", err: true });
 });
 
 test("showLevels: empty = L0 identity, otherwise joined", () => {
