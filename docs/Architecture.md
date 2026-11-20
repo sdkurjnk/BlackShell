@@ -13,7 +13,8 @@
 ![그림 1. 컴포넌트 계층](image/Architecture.png)
 
 **그림 1. 컴포넌트 계층.** 회색 = 우리 IP(Gate·Noising·EquivalenceHarness), 흰 박스 = LLVM 블랙박스/데이터 경로,
-점선 화살표 = control/verify. IR(LLVM)은 엔진 안 primitive 사이를 **인메모리 `llvm::Module`**로 오간다.
+점선 화살표 = control(drive·reject). Optimization 뒤 pure/noised로 갈라져 Code Generator가 .o 2개를 내고
+Harness가 흐름 안에서 비교한다. IR(LLVM)은 엔진 안 primitive 사이를 **인메모리 `llvm::Module`**로 오간다.
 
 ---
 
