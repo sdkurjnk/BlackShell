@@ -34,17 +34,18 @@ int main(int argc, char** argv) {
     check(m != nullptr, "frontend_compile: C source -> Module");
 
     if (m) {
-        // --- our IP primitives (dummies) operate on the Module ---
+        // --- pipeline order: gate (IP) -> optimize (LLVM) -> noising (IP) ---
         check(gate_check(*m), "gate_check: dummy accept-all returns true");
+        optimize_apply(*m);  // real LLVM opt, in place; no bool to assert
         check(noising_apply(*m, {"L1", "L2"}), "noising_apply: dummy identity carries levels, returns true");
-        check(harness_verify(*m, *m), "harness_verify: dummy equivalent returns true");
-        // --- backend (embedded LLVM); consumes the Module last ---
+        // --- backend (embedded LLVM) emits the object; harness compares objects ---
         check(backend_emit(*m, "unit.o") && nonempty("unit.o"), "backend_emit: Module -> .o");
+        check(harness_verify("unit.o", "unit.o"), "harness_verify: dummy equivalent returns true");
     }
 
     // --- driver (sequencer) ---
-    check(driver_check(src) == EXIT_OK, "driver_check: dummy gate -> EXIT_OK");
-    check(driver_enshell(src, {"L3"}) == EXIT_OK, "driver_enshell: full pipeline -> EXIT_OK");
+    check(driver_check(src) == Status::GateOk, "driver_check: dummy gate -> GateOk");
+    check(driver_enshell(src, {"L3"}) == Status::Sealed, "driver_enshell: full pipeline -> Sealed");
     check(fs::exists(obj), "driver_enshell: produces <stem>.o artifact");
 
     std::printf("\n%d failure(s)\n", failures);
