@@ -16,14 +16,15 @@
           ▼
         frontend (clang)  ── LLVM 블랙박스 ──┐
         gate     (IR → 통과|거부)            │
+        optimize (IR → IR, LLVM opt O2)      │
         noising  (IR → IR, L1~L3)            ├ 04. primitive 계약
-        harness  (baseline vs 변환)          │ (시그니처 = engine.hpp)
+        harness  (pure.o vs noised.o)        │ (시그니처 = engine.hpp)
         backend  (llc) ── LLVM 블랙박스 ──────┘
           │
           ▼
         IR = LLVM IR, primitive 사이를 인메모리 llvm::Module로 전달  ── 03. IR 모델 ──
 
-        harness = EquivalenceHarness (baseline vs 변환, enshell에 상시 내장) ── 05. 하네스 ──
+        harness = EquivalenceHarness (pure.o vs noised.o, enshell에 상시 내장) ── 05. 하네스 ──
 ```
 
 ## 문서 목록

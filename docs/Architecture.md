@@ -42,7 +42,7 @@ Launcher의 `enshell`이 스테이징된 유닛마다 엔진 `enshell`을 한 �
 - **더미 상태** — 우리 IP(게이트·노이징·하네스)는 전부 더미. identity noising = 보호 없음,
   accept-all gate = 어떤 유닛도 거부 안 함.
 - **구조적 격리** — 외부 메모리 공유를 게이트가 판정하는 자리(현재 더미). (`interfaces/03-ir-model.md`)
-- **등가 검증** — baseline(L0) vs 변환을 컴파일·실행해 관측 출력만 비교. 샘플 기반이라 반례 부재이지 증명은
+- **등가 검증** — pure.o vs noised.o를 링크·실행해 관측 출력만 비교. 샘플 기반이라 반례 부재이지 증명은
   아니다. (`interfaces/05-verification-harness.md`)
 
 ---
