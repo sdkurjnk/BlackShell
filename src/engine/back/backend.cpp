@@ -33,21 +33,32 @@ bool backend_emit(llvm::Module& m, const std::string& obj_out) {
 
     std::string err;
     const llvm::Target* target = llvm::TargetRegistry::lookupTarget(triple, err);
-    if (!target) return false;
+
+    if (!target) {
+        return false;
+    }
 
     llvm::TargetOptions opts;
     std::unique_ptr<llvm::TargetMachine> tm(target->createTargetMachine(
         triple, "generic", "", opts, std::optional<llvm::Reloc::Model>()));
-    if (!tm) return false;
+    if (!tm) {
+        return false;
+    }
+
     m.setDataLayout(tm->createDataLayout());
 
     std::error_code ec;
     llvm::raw_fd_ostream out(obj_out, ec, llvm::sys::fs::OF_None);
-    if (ec) return false;
+
+    if (ec) {
+        return false;
+    }
 
     llvm::legacy::PassManager pm;
-    if (tm->addPassesToEmitFile(pm, out, nullptr, llvm::CodeGenFileType::ObjectFile))
+    if (tm->addPassesToEmitFile(pm, out, nullptr, llvm::CodeGenFileType::ObjectFile)) {
         return false;
+    }
+
     pm.run(m);
     out.flush();
     return true;

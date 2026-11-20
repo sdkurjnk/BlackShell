@@ -14,12 +14,22 @@ static std::string stem(const std::string& path) {
     return (d == std::string::npos) ? base : base.substr(0, d);
 }
 
-// Gate verdict only (preview before staging). Compiles to IR, then gates it.
+// Gate verdict only (preview before staging).
+// Compiles to IR, then gates it.
 int driver_check(const std::string& src) {
     llvm::LLVMContext ctx;
     std::unique_ptr<llvm::Module> m = frontend_compile(src, ctx);
-    if (!m) { std::printf("frontend.failed %s\n", src.c_str()); return EXIT_ERR; }
-    if (!gate_check(*m)) { std::printf("gate.reject %s\n", src.c_str()); return EXIT_REJECT; }
+
+    if (!m) {
+        std::printf("frontend.failed %s\n", src.c_str());
+        return EXIT_ERR;
+    }
+
+    if (!gate_check(*m)) {
+        std::printf("gate.reject %s\n", src.c_str());
+        return EXIT_REJECT;
+    }
+
     std::printf("gate.ok %s\n", src.c_str());
     return EXIT_OK;
 }
