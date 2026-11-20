@@ -8,7 +8,7 @@
 
 **외부는 TS Launcher, 실행은 C++ 엔진.** Launcher(`src/launcher/cli.ts`)가 CLI·명령셋·스테이징·렌더를
 소유하고, 유닛마다 엔진 바이너리를 서브프로세스로 띄워 primitive(`check`/`enshell`)를 호출한다. 엔진은
-구조화된 토큰 한 줄 + exit code만 돌려주고, 사용자 메시지 렌더는 Launcher가 한다.
+파일명 없는 상태 코드 한 줄 + exit code만 돌려주고, 사용자 메시지는 Launcher가 스테이징 데이터로 src/obj를 채워 렌더한다.
 
 ![그림 1. 컴포넌트 계층](image/Architecture.png)
 
@@ -19,20 +19,23 @@
 
 ## 2. enshell 파이프라인
 
-봉인 본체(`driver_enshell`). 순서 고정 — `Clang → gate → noising → harness → LLVM → artifact`. 모든 단계가
-같은 계약(인메모리 `llvm::Module` in/out)을 지킨다. 등가검증은 플래그가 아니라 상시 내장.
+봉인 본체(`driver_enshell`)는 핸드오프 체인 — 각 단계가 제 일을 하고 다음 단계를 직접 호출한다.
+현재 순서는 선형: `Clang → gate → noising → harness → LLVM → artifact`. 모든 단계가
+같은 계약(인메모리 `llvm::Module` in/out)을 지키고, 등가검증은 플래그가 아니라 상시 내장이다.
 
-![그림 2. enshell 파이프라인](image/process_pipeline.png)
+![그림 2. 목표 enshell 파이프라인](image/process_pipeline.png)
 
-**그림 2. enshell 파이프라인.** 게이트 = 노이징 앞 go/no-go, harness = 노이징 뒤 안전망. Launcher의
+**그림 2. 목표 enshell 파이프라인.** 게이트 = 노이징 앞 go/no-go, harness = 노이징 뒤 안전망. Launcher의
 `enshell`이 스테이징된 유닛마다 엔진 `enshell`을 한 번씩 호출하고 완료 후 스테이징을 비운다(1-shot).
+이미지는 **목표 형태**(Optimization·pure/noised 이중경로·machine code 비교)이고, 현재 `driver_enshell`은
+그 **선형 부분집합**(Optimization·이중 emit·.o 비교 미구현)이다.
 
 ---
 
 ## 3. 핵심 설계 원칙
 
 - **경계** — Launcher가 명령셋을 소유, 엔진엔 `[subcommand, path]`(enshell은 `--level` 덧붙임) argv만 넘긴다.
-  엔진은 토큰 + exit code만, 렌더는 Launcher(`render()`). (`interfaces/01-cli-seam.md`)
+  엔진은 bare 상태 코드 + exit code만, 렌더는 Launcher(`render()`). (`interfaces/01-cli-seam.md`)
 - **primitive 계약** — 시그니처는 `src/engine/engine.hpp`. 각 primitive는 `.cpp` 하나로, 계약은 고정이고
   몸통은 그 파일에 격리된다. (`interfaces/04-pass-contract.md`)
 - **더미 상태** — 우리 IP(게이트·노이징·하네스)는 전부 더미. identity noising = 보호 없음,

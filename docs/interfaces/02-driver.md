@@ -1,6 +1,6 @@
 # 02. 드라이버 (명령 조합 · 파이프라인 순서)
 
-> 명령 문법·레벨은 Launcher, 봉인 파이프라인 시퀀싱은 엔진 Driver. — 인터페이스 ②.
+> 명령 문법·레벨은 Launcher, 봉인 파이프라인(핸드오프 체인)은 엔진 Driver. — 인터페이스 ②.
 
 ## 명령 (Launcher 소유)
 
@@ -14,7 +14,7 @@ git 2단계 — `add`로 스테이징 → `enshell`로 전체 봉인(`git commit
 | `enshell` | 스테이징 전체 봉인 → 오브젝트, 완료 후 비움(1-shot) | `git commit` |
 | `check <source>` | 게이트만 (미리보기) | — |
 
-스테이징 = `.blackshell/stage.json`, `Unit = { path, levels[] }`. 유닛은 소스 파일(`.c`), 프론트엔드(clang)가 IR로 낮춘다.
+스테이징 = `.blackshell/stage.json`, `Unit = { path, levels[], name? }`(`name` = `--name`으로 지정한 출력 stem). 유닛은 소스 파일(`.c`), 프론트엔드(clang)가 IR로 낮춘다.
 
 > **레벨 UX vs 계약:** 사용자 앞문은 단일 다이얼 `--level N`(누적 사다리)이지만, 저장·전달은 직교 집합
 > `{L1..LN}`이다. Launcher가 `enshell <path> --level L1,L2`로 집합을 엔진에 전달하고, 엔진 계약은 집합을

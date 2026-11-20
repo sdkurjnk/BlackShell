@@ -10,9 +10,9 @@
           |
           |  ── 01. CLI 경계 (argv in / stdout 토큰 · exit out) ──
           ▼
-[엔진]  main.cpp → driver.cpp     ── 02. 드라이버 (primitive 시퀀서) ──
+[엔진]  main.cpp → driver/driver.cpp   ── 02. 드라이버 (핸드오프 체인) ──
           |          
-          │  check / enshell 디스패치 → 고정 순서로 primitive 호출
+          │  check / enshell 디스패치 → 각 단계가 다음을 직접 호출(고정 순서)
           ▼
         frontend (clang)  ── LLVM 블랙박스 ──┐
         gate     (IR → 통과|거부)            │
@@ -31,7 +31,7 @@
 | # | 문서 | 고정하는 계약 | 핵심 인터페이스 |
 | --- | --- | --- | --- |
 | 01 | [cli-seam](01-cli-seam.md) | Launcher↔엔진 경계: argv in·stdout 토큰·exit code | — |
-| 02 | [driver](02-driver.md) | primitive 시퀀서, 파이프라인 순서, 명령 조합 | 인터페이스 ② 드라이버+토글 |
+| 02 | [driver](02-driver.md) | primitive 핸드오프 체인, 파이프라인 순서, 명령 조합 | 인터페이스 ② 드라이버+토글 |
 | 03 | [ir-model](03-ir-model.md) | LLVM IR 전달(인메모리 Module), 격리 메모리 모델 | — |
 | 04 | [pass-contract](04-pass-contract.md) | `gate: IR→통과\|거부` / `noising: IR→IR` primitive | 인터페이스 ① 패스 계약 |
 | 05 | [verification-harness](05-verification-harness.md) | baseline(L0) vs 변환 결과 일치 검증 | 인터페이스 ③ 등가 하네스 |
