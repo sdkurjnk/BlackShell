@@ -41,6 +41,7 @@ bool backend_emit(llvm::Module& m, const std::string& obj_out) {
     llvm::TargetOptions opts;
     std::unique_ptr<llvm::TargetMachine> tm(target->createTargetMachine(
         triple, "generic", "", opts, std::optional<llvm::Reloc::Model>()));
+
     if (!tm) {
         return false;
     }

@@ -36,6 +36,7 @@ static const char* status_token(Status s) {
 }
 
 // Status -> the process exit code.
+// No default: a new Status must be classified here, or -Wswitch flags it.
 static int status_exit(Status s) {
     switch (s) {
         case Status::Sealed:
@@ -44,9 +45,16 @@ static int status_exit(Status s) {
             return EXIT_OK;
         case Status::GateReject:
             return EXIT_REJECT;
-        default:
+        case Status::FrontendFailed:
+        case Status::NoisingFailed:
+        case Status::VerifyBroken:
+        case Status::BackendFailed:
+        case Status::ArgOnePositional:
+        case Status::CmdUnknown:
             return EXIT_ERR;
     }
+
+    return EXIT_ERR;
 }
 
 // Parse the command and hand it to the Driver, yielding one Status.
